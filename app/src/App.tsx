@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { css } from './css'
-import { ToastProvider } from './state/ToastProvider'
+import { ToastProvider, useToast } from './state/ToastProvider'
 import { ChatProvider, useChat } from './state/ChatProvider'
 import { TasksProvider } from './state/TasksProvider'
 import { Header } from './components/Header'
@@ -23,8 +23,21 @@ const PAGE =
 
 function Shell({ authUser, onLogout }: AppProps) {
   const { newChat } = useChat()
+  const { showToast } = useToast()
   const [showSidebar, setShowSidebar] = useState(true)
   const [overlay, setOverlay] = useState<Overlay>(null)
+
+  // Handle the return from the Zibal payment gateway (?billing=success|failed).
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const billing = params.get('billing')
+    if (!billing) return
+    showToast(billing === 'success' ? 'پرداخت موفق بود؛ اشتراکت فعال شد ✓' : 'پرداخت کامل نشد. دوباره امتحان کن.')
+    if (billing === 'success') setOverlay('plans')
+    params.delete('billing')
+    const qs = params.toString()
+    window.history.replaceState({}, '', window.location.pathname + (qs ? '?' + qs : ''))
+  }, [showToast])
 
   const bodyGrid =
     'flex:1;min-height:0;display:grid;grid-template-columns:' +

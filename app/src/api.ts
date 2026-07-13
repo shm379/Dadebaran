@@ -88,6 +88,10 @@ export const models = {
   },
 }
 
+// checkout may either activate immediately (manual/demo) or return a payment
+// gateway URL to redirect the browser to (Zibal).
+export type CheckoutResult = Partial<SubscriptionStatus> & { checkoutUrl?: string; activated?: boolean }
+
 export const billing = {
   async plans(): Promise<Plan[]> {
     const data = await request('/api/plans')
@@ -96,8 +100,8 @@ export const billing = {
   async status(): Promise<SubscriptionStatus> {
     return (await request('/api/subscription')) as unknown as SubscriptionStatus
   },
-  async checkout(plan: string): Promise<SubscriptionStatus> {
-    return (await request('/api/subscription/checkout', postInit({ plan }))) as unknown as SubscriptionStatus
+  async checkout(plan: string): Promise<CheckoutResult> {
+    return (await request('/api/subscription/checkout', postInit({ plan }))) as unknown as CheckoutResult
   },
   async cancel(): Promise<SubscriptionStatus> {
     return (await request('/api/subscription/cancel', postInit({}))) as unknown as SubscriptionStatus

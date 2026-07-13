@@ -42,7 +42,12 @@ services:
       NABUGATE_MODEL: ${NABUGATE_MODEL:-nabu-fast}
       # Optional direct Anthropic fallback when NABUGATE_URL is unset.
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # Billing: manual (demo, activates instantly) or zibal (real gateway).
       BILLING_PROVIDER: ${BILLING_PROVIDER:-manual}
+      ZIBAL_MERCHANT: ${ZIBAL_MERCHANT:-}
+      # Public URL of THIS app (for the Zibal callback + return redirect), e.g.
+      # https://gpt.example.com — required when BILLING_PROVIDER=zibal.
+      APP_BASE_URL: ${APP_BASE_URL:-}
     depends_on:
       db:
         condition: service_healthy

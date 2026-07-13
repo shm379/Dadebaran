@@ -16,8 +16,8 @@ five RTL Persian AI assistants, user accounts, a model gateway, and subscription
   internal OpenAI-compatible gateway). The model list is fetched from it and
   shown in a picker.
 - **Subscriptions** — free / pro / business plans, per-day usage limits on the
-  free plan, an in-app plans dialog. Provider-agnostic checkout (manual by
-  default; ready to plug in Zarinpal/Stripe).
+  free plan, an in-app plans dialog, and **Zibal** payment checkout
+  (`BILLING_PROVIDER=zibal`) with server-side verification (or `manual` demo mode).
 - **Rich input** — image & video upload (sent as vision blocks), voice dictation,
   a voice-conversation overlay, and scheduled tasks.
 
@@ -109,6 +109,36 @@ API, set three things:
 
 All client calls already send `credentials: 'include'`, so the cookie session
 works cross-origin once the above are set.
+
+## Connect NabuGate (real answers)
+
+Set these on the backend (Coolify env or `.env`) and completions go to your
+gateway instead of the preview message:
+
+```
+NABUGATE_URL=http://<host>:8080      # or https://nabugate.yourdomain — address + port
+NABUGATE_API_KEY=nabu_...            # a valid Nabu API key (Bearer)
+NABUGATE_MODEL=nabu-fast             # a model alias the gateway exposes
+```
+
+If the app and NabuGate both run in Coolify, use NabuGate's internal address
+(e.g. `http://nabugate:8080`) and put both on the same Docker network (see the
+compose `networks` note). The model picker is populated from `GET /v1/models`.
+
+## Payments (Zibal)
+
+```
+BILLING_PROVIDER=zibal
+ZIBAL_MERCHANT=<your-merchant-id>    # "zibal" is the sandbox merchant for testing
+APP_BASE_URL=https://gpt.example.com # public URL of THIS app (for the callback)
+```
+
+Flow: choosing a paid plan calls `POST /api/subscription/checkout`, which asks
+Zibal for a payment and returns a `checkoutUrl`; the browser is redirected there.
+After paying, Zibal returns to `GET /api/billing/zibal/callback`, which
+**verifies the payment server-side** and activates the subscription, then bounces
+back to the app with `?billing=success`. Plan prices are in Toman and converted
+to Rial for Zibal.
 
 ## Environment
 

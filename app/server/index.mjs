@@ -11,7 +11,7 @@ import { initDb, ping } from './db.mjs'
 import { register, login, logout, me, requireAuth } from './auth.mjs'
 import { handleComplete } from './complete.mjs'
 import { listModels } from './models.mjs'
-import { listPlans, getStatus, checkout, cancel, consumeQuota, refundQuota } from './billing.mjs'
+import { listPlans, getStatus, checkout, cancel, consumeQuota, refundQuota, verifyAndActivateZibal } from './billing.mjs'
 import { rateLimit } from './ratelimit.mjs'
 
 const DIST = fileURLToPath(new URL('../dist', import.meta.url))
@@ -112,6 +112,20 @@ app.post('/api/subscription/cancel', requireAuth, async (req, res) => {
   } catch (err) {
     fail(res, 503, err)
   }
+})
+
+// Zibal payment callback (public — the user's browser is redirected here by the
+// gateway). We verify server-side before activating, then bounce back to the app.
+app.get('/api/billing/zibal/callback', async (req, res) => {
+  const base = (process.env.APP_BASE_URL || '').replace(/\/+$/, '')
+  let ok = false
+  try {
+    const result = await verifyAndActivateZibal(String(req.query.trackId || ''))
+    ok = result.ok
+  } catch (err) {
+    console.error('[zibal] callback error:', err && err.message)
+  }
+  res.redirect(`${base || ''}/?billing=${ok ? 'success' : 'failed'}`)
 })
 
 // ---- Completion (usage-gated) ----

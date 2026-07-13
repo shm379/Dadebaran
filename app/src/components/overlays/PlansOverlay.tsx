@@ -34,7 +34,13 @@ export function PlansOverlay({ onClose }: { onClose: () => void }) {
     setPending(code)
     try {
       const next = await billing.checkout(code)
-      setStatus(next)
+      // Zibal (or any real gateway) — hand off to the payment page.
+      if (next.checkoutUrl) {
+        showToast('در حال انتقال به درگاهِ پرداخت…')
+        window.location.assign(next.checkoutUrl)
+        return
+      }
+      setStatus(next as SubscriptionStatus)
       showToast(code === 'free' ? 'به پلنِ رایگان برگشتی' : 'اشتراک فعال شد ✓')
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : 'انجام نشد؛ دوباره امتحان کن.')

@@ -3,9 +3,39 @@
 // where a real gateway (Stripe, Zarinpal, …) returns a redirect URL instead.
 import { pool } from './db.mjs'
 import { getPlan, isValidPlan, publicPlan, DEFAULT_PLAN, PLANS } from './plans.mjs'
+import * as zibal from './providers/zibal.mjs'
 
 const PROVIDER = process.env.BILLING_PROVIDER || 'manual'
 const PERIOD_DAYS = 30
+
+function appBaseUrl() {
+  return (process.env.APP_BASE_URL || '').replace(/\/+$/, '')
+}
+
+// Make one subscription row the sole active one for a user, atomically.
+async function activateSubscription(userId, subId) {
+  const periodEnd = new Date(Date.now() + PERIOD_DAYS * 86400 * 1000)
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    await client.query(
+      `UPDATE subscriptions SET status = 'canceled', updated_at = now()
+        WHERE user_id = $1 AND status = 'active' AND id <> $2`,
+      [userId, subId],
+    )
+    await client.query(
+      `UPDATE subscriptions SET status = 'active', current_period_end = $1, cancel_at_period_end = false, updated_at = now()
+        WHERE id = $2`,
+      [periodEnd, subId],
+    )
+    await client.query('COMMIT')
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {})
+    throw err
+  } finally {
+    client.release()
+  }
+}
 
 export async function getActiveSubscription(userId) {
   const { rows } = await pool.query(
@@ -111,37 +141,72 @@ export async function checkout(userId, planCode) {
     return { status: 200, body: { activated: true, ...(await getStatus(userId)) } }
   }
 
-  if (PROVIDER !== 'manual') {
-    // Seam for a real payment provider: create a checkout session and return
-    // its redirect URL; the provider webhook then activates the subscription.
-    return {
-      status: 501,
-      body: { error: 'provider_not_configured', message: 'درگاه پرداخت هنوز پیکربندی نشده است.' },
+  const plan = getPlan(planCode)
+
+  if (PROVIDER === 'zibal') {
+    const base = appBaseUrl()
+    if (!base) {
+      return { status: 500, body: { error: 'config', message: 'آدرسِ برنامه (APP_BASE_URL) تنظیم نشده.' } }
+    }
+    // Record a pending subscription; its id is the Zibal orderId.
+    const { rows } = await pool.query(
+      `INSERT INTO subscriptions (user_id, plan_code, status, provider) VALUES ($1, $2, 'pending', 'zibal') RETURNING id`,
+      [userId, planCode],
+    )
+    const subId = rows[0].id
+    try {
+      const { trackId, payUrl } = await zibal.requestPayment({
+        amount: plan.price * 10, // Toman -> Rial
+        orderId: subId,
+        description: `اشتراکِ ${plan.name} — MR.CHATGPT`,
+        callbackUrl: `${base}/api/billing/zibal/callback`,
+      })
+      await pool.query(`UPDATE subscriptions SET provider_ref = $1, updated_at = now() WHERE id = $2`, [trackId, subId])
+      return { status: 200, body: { checkoutUrl: payUrl } }
+    } catch (err) {
+      await pool.query(`UPDATE subscriptions SET status = 'failed', updated_at = now() WHERE id = $1`, [subId]).catch(() => {})
+      console.error('[zibal] request failed:', err.message)
+      return { status: 502, body: { error: 'gateway', message: 'اتصال به درگاهِ پرداخت ناموفق بود. دوباره امتحان کن.' } }
     }
   }
 
-  const periodEnd = new Date(Date.now() + PERIOD_DAYS * 86400 * 1000)
-  const client = await pool.connect()
-  try {
-    await client.query('BEGIN')
-    await client.query(
-      `UPDATE subscriptions SET status = 'canceled', updated_at = now()
-        WHERE user_id = $1 AND status = 'active'`,
-      [userId],
-    )
-    await client.query(
-      `INSERT INTO subscriptions (user_id, plan_code, status, provider, current_period_end)
-       VALUES ($1, $2, 'active', 'manual', $3)`,
-      [userId, planCode, periodEnd],
-    )
-    await client.query('COMMIT')
-  } catch (err) {
-    await client.query('ROLLBACK').catch(() => {})
-    throw err
-  } finally {
-    client.release()
+  if (PROVIDER !== 'manual') {
+    return { status: 501, body: { error: 'provider_not_configured', message: 'درگاه پرداخت پیکربندی نشده است.' } }
   }
+
+  // manual (demo) — activate immediately in a transaction.
+  const { rows } = await pool.query(
+    `INSERT INTO subscriptions (user_id, plan_code, status, provider) VALUES ($1, $2, 'pending', 'manual') RETURNING id`,
+    [userId, planCode],
+  )
+  await activateSubscription(userId, rows[0].id)
   return { status: 200, body: { activated: true, ...(await getStatus(userId)) } }
+}
+
+/**
+ * Verify a Zibal payment (called from the callback) and activate the matching
+ * pending subscription. Idempotent: a repeated callback for an already-active
+ * subscription is a no-op success.
+ * @returns {Promise<{ok:boolean, reason?:string}>}
+ */
+export async function verifyAndActivateZibal(trackId) {
+  if (!trackId) return { ok: false, reason: 'no_track' }
+  const { rows } = await pool.query(
+    `SELECT id, user_id, status FROM subscriptions WHERE provider = 'zibal' AND provider_ref = $1 ORDER BY id DESC LIMIT 1`,
+    [trackId],
+  )
+  const sub = rows[0]
+  if (!sub) return { ok: false, reason: 'not_found' }
+  if (sub.status === 'active') return { ok: true } // already processed
+  const v = await zibal.verifyPayment(trackId)
+  if (!v.paid) {
+    await pool
+      .query(`UPDATE subscriptions SET status = 'failed', updated_at = now() WHERE id = $1 AND status = 'pending'`, [sub.id])
+      .catch(() => {})
+    return { ok: false, reason: 'not_paid' }
+  }
+  await activateSubscription(sub.user_id, sub.id)
+  return { ok: true }
 }
 
 /** Stop auto-renewal but keep access until the paid period ends. */

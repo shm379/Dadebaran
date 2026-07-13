@@ -4,7 +4,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from 'react'
-import { css } from './css'
+import { css } from '../../css'
 
 // Several hover states override only `border-color` while the base uses the
 // `border` shorthand. Mixing shorthand + longhand for the same value makes
@@ -32,16 +32,9 @@ type HoverButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'style'> &
 
 /**
  * A <button> that merges an extra style string on hover — replicating the
- * prototype's `style` + `style-hover` attribute pair, which the design runtime
- * turned into a generated :hover rule.
+ * prototype's `style` + `style-hover` attribute pair.
  */
-export function HoverButton({
-  styleStr,
-  hoverStr,
-  children,
-  disabled,
-  ...rest
-}: HoverButtonProps) {
+export function HoverButton({ styleStr, hoverStr, children, disabled, ...rest }: HoverButtonProps) {
   const [hover, setHover] = useState(false)
   const style = normalizeBorder({
     ...css(styleStr),

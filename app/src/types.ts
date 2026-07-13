@@ -23,9 +23,11 @@ export type Msg = {
   sourceIdea?: string
 }
 
+export type Settings = Record<string, string>
+
 export type BotState = {
   messages: Msg[]
-  settings: Record<string, string>
+  settings: Settings
 }
 
 export type Repeat = 'once' | 'daily' | 'hourly' | 'weekly'
@@ -52,21 +54,34 @@ export type TaskDraft = {
 
 export type VoiceState = 'idle' | 'listening' | 'thinking' | 'speaking'
 
-export type AppState = {
-  activeBot: BotId
-  bots: Record<BotId, BotState>
-  input: string
-  pendingImage: ImageData | null
-  listening: boolean
-  voiceMode: boolean
-  voiceState: VoiceState
-  voiceTranscript: string
-  voiceReply: string
-  speakReplies: boolean
-  tasksOpen: boolean
-  tasks: Task[]
-  taskDraft: TaskDraft
-  busy: boolean
-  showSidebar: boolean
-  toast: string
+// ---- Auth / billing / models ----
+
+export type User = { id: string; email: string | null; phone: string | null; name: string | null }
+
+export type ModelOption = { id: string; label: string }
+
+export type PlanLimits = { dailyMessages: number | null }
+
+export type Plan = {
+  code: string
+  name: string
+  price: number
+  currency: string
+  priceLabel: string
+  period: string
+  limits: PlanLimits
+  features: string[]
+}
+
+export type UsageInfo = { used: number; limit: number | null; remaining: number | null }
+
+export type SubscriptionStatus = {
+  plan: Plan
+  subscription: {
+    planCode: string
+    status: string
+    provider: string
+    currentPeriodEnd: string | null
+  } | null
+  usage: UsageInfo
 }

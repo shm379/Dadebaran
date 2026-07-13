@@ -1,8 +1,9 @@
 // Prompt construction and response parsing — a direct port of the prototype's
 // `buildPrompt`, `jsonInstr` and `parse`.
 import type { BotId } from './config'
+import type { Settings } from './types'
 
-export type Settings = Record<string, string>
+export type { Settings }
 export type MediaKind = 'image' | 'video' | null
 
 function jsonInstr(keys: string): string {

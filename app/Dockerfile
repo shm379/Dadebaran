@@ -1,6 +1,10 @@
 # ---- build the SPA ----
 FROM node:22-alpine AS build
 WORKDIR /app
+# Bake the backend URL into the SPA at build time. Empty = same-origin (default,
+# since the runtime server serves the SPA + API together).
+ARG VITE_API_BASE_URL=""
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .

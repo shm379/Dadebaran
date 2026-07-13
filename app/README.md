@@ -93,8 +93,26 @@ service's network (see the commented `networks` block in the compose file).
 | `POST /api/complete` | ✓ | model completion (usage-gated) |
 | `GET /api/health` | – | liveness + DB check |
 
+## Frontend + backend on separate origins
+
+By default the server serves the SPA and the API together, so the client calls
+relative `/api/...` paths and cookies "just work". To host the built **design**
+on its own origin (static host / separate Coolify resource) and point it at this
+API, set three things:
+
+- `VITE_API_BASE_URL` (build time) — the API's base URL, e.g. `https://api.example.com`.
+  The client prefixes every request with it.
+- `CORS_ORIGIN` (backend) — allowlist of frontend origins, e.g. `https://app.example.com`
+  (comma-separated, or `*`). The server echoes the origin and allows credentials.
+- `COOKIE_SAMESITE=none` (backend) — so the session cookie is sent cross-origin
+  (this forces `Secure`, i.e. HTTPS).
+
+All client calls already send `credentials: 'include'`, so the cookie session
+works cross-origin once the above are set.
+
 ## Environment
 
 See `.env.example`. Key vars: `JWT_SECRET` (required), `DATABASE_URL` or
 `POSTGRES_*`, `COOKIE_SECURE`, `NABUGATE_URL` / `NABUGATE_API_KEY` /
-`NABUGATE_MODEL`, `ANTHROPIC_API_KEY` (fallback), `BILLING_PROVIDER`.
+`NABUGATE_MODEL`, `ANTHROPIC_API_KEY` (fallback), `BILLING_PROVIDER`,
+`VITE_API_BASE_URL` / `CORS_ORIGIN` / `COOKIE_SAMESITE` (cross-origin).

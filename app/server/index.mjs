@@ -20,6 +20,34 @@ const PORT = Number(process.env.PORT || 3000)
 
 const app = express()
 app.set('trust proxy', 1) // behind Coolify / Traefik so secure cookies work
+
+// CORS — only needed when the frontend is served from a different origin than
+// this API. Set CORS_ORIGIN to a comma-separated allowlist (or "*"). Credentials
+// are allowed so the session cookie is sent; the allowed origin is echoed back
+// (never "*" with credentials), and the frontend must send credentials + the
+// cookie must be COOKIE_SAMESITE=none (Secure) to cross origins.
+const CORS_ORIGINS = (process.env.CORS_ORIGIN || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean)
+if (CORS_ORIGINS.length) {
+  app.use((req, res, next) => {
+    const origin = req.headers.origin
+    if (origin && (CORS_ORIGINS.includes('*') || CORS_ORIGINS.includes(origin))) {
+      res.setHeader('Access-Control-Allow-Origin', origin)
+      res.setHeader('Vary', 'Origin')
+      res.setHeader('Access-Control-Allow-Credentials', 'true')
+      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+      res.setHeader('Access-Control-Max-Age', '600')
+      if (req.method === 'OPTIONS') return res.status(204).end()
+    } else if (req.method === 'OPTIONS') {
+      return res.status(204).end()
+    }
+    next()
+  })
+}
+
 app.use(express.json({ limit: '12mb' }))
 
 // ---- API ----

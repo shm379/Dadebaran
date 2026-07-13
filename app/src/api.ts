@@ -10,6 +10,15 @@
  */
 import type { ModelOption, Plan, SubscriptionStatus, User } from './types'
 
+// Base URL of the backend. Empty = same-origin (the server serves the SPA and
+// the API together). Set VITE_API_BASE_URL at build time to point the design at
+// a separately-hosted backend, e.g. https://api.example.com — then the backend
+// needs CORS_ORIGIN set to this frontend's origin and COOKIE_SAMESITE=none.
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+function apiUrl(path: string): string {
+  return API_BASE + path
+}
+
 export type TextBlock = { type: 'text'; text: string }
 export type ImageBlock = {
   type: 'image'
@@ -29,7 +38,7 @@ export class ApiError extends Error {
 async function request(path: string, init?: RequestInit): Promise<Record<string, unknown>> {
   let res: Response
   try {
-    res = await fetch(path, { credentials: 'include', ...init })
+    res = await fetch(apiUrl(path), { credentials: 'include', ...init })
   } catch {
     throw new ApiError('offline', 'اتصال به سرور برقرار نشد. اینترنت یا سرور را بررسی کن.')
   }
@@ -62,8 +71,10 @@ export const auth = {
   },
   async me(): Promise<User | null> {
     try {
-      const data = await request('/api/auth/me')
-      return (data.user as User) ?? null
+      const res = await fetch(apiUrl('/api/auth/me'), { credentials: 'include' })
+      if (!res.ok) return null
+      const data = (await res.json().catch(() => ({}))) as { user?: User }
+      return data.user ?? null
     } catch {
       return null
     }
@@ -97,7 +108,7 @@ export const claude = {
   async complete({ messages, model }: { messages: Message[]; model?: string }): Promise<string> {
     let res: Response
     try {
-      res = await fetch('/api/complete', {
+      res = await fetch(apiUrl('/api/complete'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

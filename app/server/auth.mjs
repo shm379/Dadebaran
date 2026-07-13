@@ -48,7 +48,14 @@ function jwtSecret() {
   return s
 }
 
+function cookieSameSite() {
+  const v = (process.env.COOKIE_SAMESITE || 'lax').toLowerCase()
+  return v === 'none' || v === 'strict' ? v : 'lax'
+}
+
 function cookieSecure() {
+  // SameSite=None is rejected by browsers without Secure, so force it on.
+  if (cookieSameSite() === 'none') return true
   if (process.env.COOKIE_SECURE != null) return process.env.COOKIE_SECURE === 'true'
   return process.env.NODE_ENV === 'production'
 }
@@ -75,7 +82,7 @@ function setAuthCookie(res, user) {
     'Set-Cookie',
     serializeCookie(COOKIE_NAME, token, {
       httpOnly: true,
-      sameSite: 'lax',
+      sameSite: cookieSameSite(),
       secure: cookieSecure(),
       path: '/',
       maxAge: TOKEN_TTL_SEC,
@@ -88,7 +95,7 @@ function clearAuthCookie(res) {
     'Set-Cookie',
     serializeCookie(COOKIE_NAME, '', {
       httpOnly: true,
-      sameSite: 'lax',
+      sameSite: cookieSameSite(),
       secure: cookieSecure(),
       path: '/',
       maxAge: 0,

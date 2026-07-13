@@ -98,6 +98,12 @@ export function useVoice() {
         return
       }
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      // The turn may have ended (or the overlay unmounted) while we awaited the
+      // mic prompt — release the stream instead of leaking it + an rAF loop.
+      if (stateRef.current !== 'listening') {
+        stream.getTracks().forEach((t) => t.stop())
+        return
+      }
       micStream.current = stream
       const Ctx = window.AudioContext || window.webkitAudioContext!
       audioCtx.current = new Ctx()

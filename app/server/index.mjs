@@ -11,7 +11,8 @@ import { initDb, ping } from './db.mjs'
 import { register, login, logout, me, requireAuth } from './auth.mjs'
 import { handleComplete } from './complete.mjs'
 import { listModels } from './models.mjs'
-import { listPlans, getStatus, checkout, cancel, checkQuota, incrementUsage } from './billing.mjs'
+import { listPlans, getStatus, checkout, cancel, consumeQuota, refundQuota } from './billing.mjs'
+import { rateLimit } from './ratelimit.mjs'
 
 const DIST = fileURLToPath(new URL('../dist', import.meta.url))
 const INDEX_HTML = join(DIST, 'index.html')
@@ -31,17 +32,28 @@ app.get('/api/health', async (_req, res) => {
   }
 })
 
-app.post('/api/auth/register', register)
-app.post('/api/auth/login', login)
+const authLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 20,
+  message: 'تلاش‌های زیاد. چند دقیقه بعد دوباره امتحان کن.',
+})
+app.post('/api/auth/register', authLimiter, register)
+app.post('/api/auth/login', authLimiter, login)
 app.post('/api/auth/logout', logout)
 app.get('/api/auth/me', me)
+
+// Log the real error server-side, return a generic message to the client.
+function fail(res, status, err, code = 'server') {
+  console.error('[api] error:', err && err.message ? err.message : err)
+  res.status(status).json({ error: code })
+}
 
 // ---- Models ----
 app.get('/api/models', requireAuth, async (_req, res) => {
   try {
     res.json({ models: await listModels() })
   } catch (err) {
-    res.status(502).json({ error: String(err) })
+    fail(res, 502, err, 'models_unavailable')
   }
 })
 
@@ -52,7 +64,7 @@ app.get('/api/subscription', requireAuth, async (req, res) => {
   try {
     res.json(await getStatus(req.user.id))
   } catch (err) {
-    res.status(503).json({ error: String(err) })
+    fail(res, 503, err)
   }
 })
 
@@ -61,7 +73,7 @@ app.post('/api/subscription/checkout', requireAuth, async (req, res) => {
     const { status, body } = await checkout(req.user.id, (req.body && req.body.plan) || '')
     res.status(status).json(body)
   } catch (err) {
-    res.status(503).json({ error: String(err) })
+    fail(res, 503, err)
   }
 })
 
@@ -70,14 +82,16 @@ app.post('/api/subscription/cancel', requireAuth, async (req, res) => {
     const { status, body } = await cancel(req.user.id)
     res.status(status).json(body)
   } catch (err) {
-    res.status(503).json({ error: String(err) })
+    fail(res, 503, err)
   }
 })
 
 // ---- Completion (usage-gated) ----
 app.post('/api/complete', requireAuth, async (req, res) => {
+  let reserved = false
   try {
-    const quota = await checkQuota(req.user.id)
+    // Reserve a quota slot atomically BEFORE the (slow) model call.
+    const quota = await consumeQuota(req.user.id)
     if (!quota.allowed) {
       return res.status(402).json({
         error: 'quota_exceeded',
@@ -85,13 +99,16 @@ app.post('/api/complete', requireAuth, async (req, res) => {
         usage: quota,
       })
     }
+    reserved = quota.limit != null
     const { status, body } = await handleComplete(req.body)
-    if (status === 200) {
-      incrementUsage(req.user.id).catch((e) => console.warn('[usage] increment failed:', e.message))
+    if (status !== 200 && reserved) {
+      // The model call failed — don't bill the reserved slot.
+      await refundQuota(req.user.id).catch((e) => console.warn('[usage] refund failed:', e.message))
     }
     res.status(status).json(body)
   } catch (err) {
-    res.status(500).json({ error: String(err) })
+    if (reserved) await refundQuota(req.user.id).catch(() => {})
+    fail(res, 500, err)
   }
 })
 

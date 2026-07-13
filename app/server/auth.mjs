@@ -8,6 +8,9 @@ import { pool } from './db.mjs'
 const COOKIE_NAME = 'mrc_token'
 const TOKEN_TTL_SEC = 60 * 60 * 24 * 30 // 30 days
 const SALT_ROUNDS = 10
+// Compared against when a login identifier doesn't exist, so response time
+// doesn't leak whether an account exists (constant-time-ish).
+const DUMMY_HASH = bcrypt.hashSync('mrc-nonexistent-account-placeholder', SALT_ROUNDS)
 
 // Minimal, dependency-free cookie serialize/parse (RFC 6265 subset we need).
 function serializeCookie(name, value, opts = {}) {
@@ -160,7 +163,8 @@ export async function login(req, res) {
       [asEmail, asPhone],
     )
     const row = rows[0]
-    const ok = row ? await bcrypt.compare(password, row.password_hash) : false
+    // Always run a compare (dummy hash when no user) to avoid a timing oracle.
+    const ok = await bcrypt.compare(password, row ? row.password_hash : DUMMY_HASH)
     if (!row || !ok) {
       return res.status(401).json({ error: 'bad_credentials', message: 'ایمیل/شماره یا رمز عبور اشتباه است.' })
     }

@@ -41,17 +41,21 @@ CREATE UNIQUE INDEX IF NOT EXISTS users_email_key ON users (lower(email)) WHERE 
 CREATE UNIQUE INDEX IF NOT EXISTS users_phone_key ON users (phone) WHERE phone IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS subscriptions (
-  id                 BIGSERIAL PRIMARY KEY,
-  user_id            BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  plan_code          TEXT NOT NULL,
-  status             TEXT NOT NULL DEFAULT 'active',
-  provider           TEXT NOT NULL DEFAULT 'manual',
-  provider_ref       TEXT,
-  current_period_end TIMESTAMPTZ,
-  created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+  id                   BIGSERIAL PRIMARY KEY,
+  user_id              BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  plan_code            TEXT NOT NULL,
+  status               TEXT NOT NULL DEFAULT 'active',
+  provider             TEXT NOT NULL DEFAULT 'manual',
+  provider_ref         TEXT,
+  current_period_end   TIMESTAMPTZ,
+  cancel_at_period_end BOOLEAN NOT NULL DEFAULT false,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS subscriptions_user_active
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS cancel_at_period_end BOOLEAN NOT NULL DEFAULT false;
+-- One active subscription per user, enforced by the DB (not just the app).
+DROP INDEX IF EXISTS subscriptions_user_active;
+CREATE UNIQUE INDEX IF NOT EXISTS subscriptions_user_active
   ON subscriptions (user_id) WHERE status = 'active';
 
 CREATE TABLE IF NOT EXISTS usage_daily (

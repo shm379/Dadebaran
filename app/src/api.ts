@@ -106,9 +106,11 @@ export const claude = {
     } catch {
       throw new ApiError('offline', 'اتصال به سرور قطع شد.')
     }
-    if (res.status === 503) throw new ApiError('no-api', '')
     if (res.status === 401) throw new ApiError('unauthenticated', '')
     const data = (await res.json().catch(() => ({}))) as { text?: string; message?: string; error?: string }
+    // Only a real "no gateway configured" is 'no-api'; other 503s (e.g. DB
+    // outage) are transient, not the permanent preview message.
+    if (res.status === 503) throw new ApiError(data.error === 'no-api' ? 'no-api' : 'offline', data.message || '')
     if (res.status === 402) throw new ApiError('quota_exceeded', data.message || '')
     if (!res.ok) throw new ApiError((data.error as string) || 'server', data.message || '')
     if (typeof data.text !== 'string') throw new ApiError('server', '')

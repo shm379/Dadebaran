@@ -2,8 +2,9 @@
 // (the internal or external gateway), with a short in-memory cache and a static
 // fallback so the picker still works before a gateway is wired up.
 
-const CACHE_MS = 60 * 1000
-let cache = { at: 0, models: null }
+const CACHE_MS = 60 * 1000 // successful gateway result
+const FALLBACK_CACHE_MS = 5 * 1000 // negative cache, so recovery is picked up quickly
+let cache = { at: 0, models: null, ok: false }
 
 const FALLBACK = [
   { id: 'nabu-fast', label: 'سریع (پیش‌فرض)' },
@@ -43,19 +44,22 @@ async function fetchFromGateway(base) {
 
 export async function listModels({ force = false } = {}) {
   const now = Date.now()
-  if (!force && cache.models && now - cache.at < CACHE_MS) return cache.models
+  const ttl = cache.ok ? CACHE_MS : FALLBACK_CACHE_MS
+  if (!force && cache.models && now - cache.at < ttl) return cache.models
   const base = nabugateBase()
-  let models = FALLBACK
-  if (base) {
-    try {
-      models = await fetchFromGateway(base)
-    } catch (err) {
-      console.warn('[models] gateway fetch failed, using fallback:', err.message)
-      models = FALLBACK
-    }
+  if (!base) {
+    cache = { at: now, models: FALLBACK, ok: false }
+    return FALLBACK
   }
-  cache = { at: now, models }
-  return models
+  try {
+    const models = await fetchFromGateway(base)
+    cache = { at: now, models, ok: true }
+    return models
+  } catch (err) {
+    console.warn('[models] gateway fetch failed, using fallback:', err.message)
+    cache = { at: now, models: FALLBACK, ok: false }
+    return FALLBACK
+  }
 }
 
 export function defaultModel() {

@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useToast } from '../state/ToastProvider'
 
 function getSR(): SpeechRecognitionLike | null {
@@ -15,6 +15,18 @@ export function useDictation(getInput: () => string, setInput: (v: string) => vo
   const [listening, setListening] = useState(false)
   const recogRef = useRef<SpeechRecognitionLike | null>(null)
   const baseRef = useRef('')
+
+  // Stop any in-flight recognition (and free the mic) if the composer unmounts.
+  useEffect(
+    () => () => {
+      try {
+        recogRef.current?.stop()
+      } catch {
+        /* ignore */
+      }
+    },
+    [],
+  )
 
   const toggle = useCallback(() => {
     if (listening) {

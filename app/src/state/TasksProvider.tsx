@@ -78,7 +78,9 @@ export function TasksProvider({ children }: { children: ReactNode }) {
   const [draft, setDraftState] = useState<TaskDraft>({ botId: 'prompt', input: '', repeat: 'daily', time: '09:00' })
   const [loaded, setLoaded] = useState(false)
   const tasksRef = useRef(tasks)
+  const draftRef = useRef(draft)
   tasksRef.current = tasks
+  draftRef.current = draft
 
   useEffect(() => {
     try {
@@ -151,28 +153,29 @@ export function TasksProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const addTask = useCallback(() => {
-    setDraftState((d) => {
-      const input = (d.input || '').trim()
-      if (!input) {
-        showToast('متنِ کار را بنویس')
-        return d
-      }
-      const task: Task = {
-        id: 'tk' + Date.now(),
-        botId: d.botId,
-        input,
-        repeat: d.repeat,
-        time: d.time,
-        enabled: true,
-        lastRun: null,
-        lastResult: null,
-        status: 'idle',
-        nextRun: computeNextRun(d.repeat, d.time),
-      }
-      setTasks((prev) => [task, ...prev])
-      showToast('کار زمان‌بندی شد ✓')
-      return { ...d, input: '' }
-    })
+    // Side effects live outside the state updater so React StrictMode's
+    // double-invocation can't add the task (or toast) twice.
+    const d = draftRef.current
+    const input = (d.input || '').trim()
+    if (!input) {
+      showToast('متنِ کار را بنویس')
+      return
+    }
+    const task: Task = {
+      id: 'tk' + Date.now(),
+      botId: d.botId,
+      input,
+      repeat: d.repeat,
+      time: d.time,
+      enabled: true,
+      lastRun: null,
+      lastResult: null,
+      status: 'idle',
+      nextRun: computeNextRun(d.repeat, d.time),
+    }
+    setTasks((prev) => [task, ...prev])
+    setDraftState((prev) => ({ ...prev, input: '' }))
+    showToast('کار زمان‌بندی شد ✓')
   }, [showToast])
 
   const toggleTask = useCallback((id: string) => {

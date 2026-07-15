@@ -4,6 +4,7 @@
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { pool } from './db.mjs'
+import { userFromApiKey, ADMIN_EMAILS } from './apikeys.mjs'
 
 const COOKIE_NAME = 'mrc_token'
 const TOKEN_TTL_SEC = 60 * 60 * 24 * 30 // 30 days
@@ -73,7 +74,9 @@ function normPhone(v) {
 }
 
 function publicUser(row) {
-  return { id: String(row.id), email: row.email, phone: row.phone, name: row.name }
+  const email = row.email
+  const isAdmin = row.is_admin === true || (!!email && ADMIN_EMAILS.includes(String(email).toLowerCase()))
+  return { id: String(row.id), email, phone: row.phone, name: row.name, isAdmin }
 }
 
 function setAuthCookie(res, user) {
@@ -135,7 +138,7 @@ export async function register(req, res) {
     const { rows } = await pool.query(
       `INSERT INTO users (email, phone, name, password_hash)
        VALUES ($1, $2, $3, $4)
-       RETURNING id, email, phone, name`,
+       RETURNING id, email, phone, name, is_admin`,
       [email, phone, name, hash],
     )
     const user = rows[0]
@@ -163,7 +166,7 @@ export async function login(req, res) {
   const asPhone = normPhone(raw)
   try {
     const { rows } = await pool.query(
-      `SELECT id, email, phone, name, password_hash
+      `SELECT id, email, phone, name, password_hash, is_admin
          FROM users
         WHERE (email IS NOT NULL AND lower(email) = $1) OR (phone IS NOT NULL AND phone = $2)
         LIMIT 1`,
@@ -197,7 +200,7 @@ async function userFromReq(req) {
   } catch {
     return null
   }
-  const { rows } = await pool.query('SELECT id, email, phone, name FROM users WHERE id = $1', [payload.sub])
+  const { rows } = await pool.query('SELECT id, email, phone, name, is_admin FROM users WHERE id = $1', [payload.sub])
   return rows[0] ? publicUser(rows[0]) : null
 }
 
@@ -234,7 +237,7 @@ export async function updateProfile(req, res) {
   }
   try {
     const { rows } = await pool.query(
-      `UPDATE users SET email = $1, phone = $2, name = $3 WHERE id = $4 RETURNING id, email, phone, name`,
+      `UPDATE users SET email = $1, phone = $2, name = $3 WHERE id = $4 RETURNING id, email, phone, name, is_admin`,
       [email, phone, name, cur.id],
     )
     return res.json({ user: publicUser(rows[0]) })
@@ -270,10 +273,15 @@ export async function changePassword(req, res) {
   }
 }
 
-// Express middleware: attaches req.user or replies 401.
+// Express middleware: attaches req.user or replies 401. Accepts either the
+// session cookie or an `Authorization: Bearer mrc_...` developer API key.
 export async function requireAuth(req, res, next) {
   try {
-    const user = await userFromReq(req)
+    let user = await userFromReq(req)
+    if (!user) {
+      const h = req.headers.authorization
+      if (h && h.startsWith('Bearer ')) user = await userFromApiKey(h.slice(7).trim())
+    }
     if (!user) return res.status(401).json({ error: 'unauthenticated', message: 'ابتدا وارد شو.' })
     req.user = user
     next()
@@ -281,4 +289,12 @@ export async function requireAuth(req, res, next) {
     console.error('[auth] requireAuth error:', err.message)
     return res.status(503).json({ error: 'server' })
   }
+}
+
+// Requires the authenticated user to be an admin.
+export function requireAdmin(req, res, next) {
+  if (!req.user || !req.user.isAdmin) {
+    return res.status(403).json({ error: 'forbidden', message: 'دسترسیِ ادمین لازم است.' })
+  }
+  next()
 }

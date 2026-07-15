@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { css } from '../css'
 import { useChat } from '../state/ChatProvider'
+import type { ModelOption } from '../types'
 
-export function ModelPicker() {
+export function ModelPicker({ onOpenPlans }: { onOpenPlans: () => void }) {
   const { model, models, setModel } = useChat()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement | null>(null)
@@ -25,26 +26,45 @@ export function ModelPicker() {
   const groups: string[] = []
   for (const m of models) if (m.group && !groups.includes(m.group)) groups.push(m.group)
 
-  const renderItem = (m: (typeof models)[number]) => {
+  const renderItem = (m: ModelOption) => {
     const active = m.id === model
+    const locked = m.allowed === false
     return (
       <button
         key={m.id}
         onClick={() => {
+          if (locked) {
+            setOpen(false)
+            onOpenPlans()
+            return
+          }
           setModel(m.id)
           setOpen(false)
         }}
+        title={locked ? 'برای دسترسی اشتراک بگیر' : undefined}
         style={css(
-          'display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:right;padding:9px 11px;border-radius:10px;cursor:pointer;font-size:.85rem;font-weight:600;border:0;color:#eaf2ff;background:' +
+          'display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:right;padding:9px 11px;border-radius:10px;cursor:pointer;font-size:.85rem;font-weight:600;border:0;background:' +
             (active ? 'rgba(22,122,254,.24)' : 'transparent') +
+            ';color:' +
+            (locked ? 'rgba(245,250,255,.55)' : '#eaf2ff') +
             ';',
         )}
       >
         <span style={css('overflow:hidden;text-overflow:ellipsis;white-space:nowrap;')}>{m.label}</span>
-        {active && (
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" style={css('flex:none;color:#60b0ff;')}>
-            <path d="M5 12.5l4 4 10-10" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+        {locked ? (
+          <span style={css('flex:none;display:inline-flex;align-items:center;gap:4px;font-size:.66rem;color:#ffd884;')}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+              <rect x="5" y="11" width="14" height="9" rx="2" stroke="currentColor" strokeWidth="1.8" />
+              <path d="M8 11V8a4 4 0 0 1 8 0v3" stroke="currentColor" strokeWidth="1.8" />
+            </svg>
+            {m.requiredPlan === 'business' ? 'سازمانی' : 'حرفه‌ای'}
+          </span>
+        ) : (
+          active && (
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" style={css('flex:none;color:#60b0ff;')}>
+              <path d="M5 12.5l4 4 10-10" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )
         )}
       </button>
     )

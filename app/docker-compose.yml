@@ -36,6 +36,9 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-mrc}
       JWT_SECRET: ${JWT_SECRET:?set a long random JWT_SECRET}
       COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      # Admins (comma-separated emails) + which models the free plan may use.
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+      FREE_MODEL_IDS: ${FREE_MODEL_IDS:-nabu-fast}
       # NabuGate (internal OpenAI-compatible gateway) — address + port you provide.
       NABUGATE_URL: ${NABUGATE_URL:-}
       NABUGATE_API_KEY: ${NABUGATE_API_KEY:-}

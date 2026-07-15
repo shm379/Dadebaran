@@ -8,10 +8,13 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { initDb, ping } from './db.mjs'
-import { register, login, logout, me, requireAuth, updateProfile, changePassword } from './auth.mjs'
+import { register, login, logout, me, requireAuth, requireAdmin, updateProfile, changePassword } from './auth.mjs'
 import { handleComplete } from './complete.mjs'
 import { listModels } from './models.mjs'
-import { listPlans, getStatus, checkout, cancel, reconcile, consumeQuota, refundQuota, verifyAndActivateZibal } from './billing.mjs'
+import { currentPlanCode, listPlans, getStatus, checkout, cancel, reconcile, consumeQuota, refundQuota, verifyAndActivateZibal } from './billing.mjs'
+import { modelAllowedForPlan, requiredPlanForModel } from './plans.mjs'
+import { listKeys, createKey, revokeKey } from './apikeys.mjs'
+import { adminStats, adminUsers, adminUpdateUser, adminDeleteUser } from './admin.mjs'
 import {
   listConversations,
   getConversation,
@@ -92,14 +95,30 @@ app.get('/api/conversations/:id', requireAuth, getConversation)
 app.patch('/api/conversations/:id', requireAuth, updateConversation)
 app.delete('/api/conversations/:id', requireAuth, deleteConversation)
 
-// ---- Models ----
-app.get('/api/models', requireAuth, async (_req, res) => {
+// ---- Models (annotated with plan access) ----
+app.get('/api/models', requireAuth, async (req, res) => {
   try {
-    res.json({ models: await listModels() })
+    const [list, planCode] = await Promise.all([listModels(), currentPlanCode(req.user.id)])
+    const models = list.map((m) => {
+      const allowed = modelAllowedForPlan(planCode, m.id)
+      return { ...m, allowed, requiredPlan: allowed ? null : requiredPlanForModel(m.id) }
+    })
+    res.json({ models, plan: planCode })
   } catch (err) {
     fail(res, 502, err, 'models_unavailable')
   }
 })
+
+// ---- Developer API keys ----
+app.get('/api/keys', requireAuth, listKeys)
+app.post('/api/keys', requireAuth, createKey)
+app.delete('/api/keys/:id', requireAuth, revokeKey)
+
+// ---- Admin ----
+app.get('/api/admin/stats', requireAuth, requireAdmin, adminStats)
+app.get('/api/admin/users', requireAuth, requireAdmin, adminUsers)
+app.patch('/api/admin/users/:id', requireAuth, requireAdmin, adminUpdateUser)
+app.delete('/api/admin/users/:id', requireAuth, requireAdmin, adminDeleteUser)
 
 // ---- Billing / subscription ----
 app.get('/api/plans', (_req, res) => res.json({ plans: listPlans() }))
@@ -159,6 +178,18 @@ app.get('/api/billing/zibal/callback', async (req, res) => {
 app.post('/api/complete', requireAuth, async (req, res) => {
   let reserved = false
   try {
+    // Enforce plan-based model access before doing any work.
+    const requestedModel = req.body && typeof req.body.model === 'string' ? req.body.model : ''
+    if (requestedModel) {
+      const planCode = await currentPlanCode(req.user.id)
+      if (!modelAllowedForPlan(planCode, requestedModel)) {
+        return res.status(403).json({
+          error: 'model_locked',
+          message: 'این مدل در پلنِ فعلیت در دسترس نیست. برای دسترسی، اشتراکت رو ارتقا بده.',
+          requiredPlan: requiredPlanForModel(requestedModel),
+        })
+      }
+    }
     // Reserve a quota slot atomically BEFORE the (slow) model call.
     const quota = await consumeQuota(req.user.id)
     if (!quota.allowed) {

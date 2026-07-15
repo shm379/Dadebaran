@@ -1,9 +1,9 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { css } from '../../css'
 import { HoverButton } from '../ui/HoverButton'
-import { auth, ApiError } from '../../api'
+import { auth, keys as keysApi, ApiError } from '../../api'
 import { useToast } from '../../state/ToastProvider'
-import type { User } from '../../types'
+import type { ApiKey, User } from '../../types'
 
 const LABEL = 'font-size:.8rem;font-weight:600;color:rgba(245,250,255,.72);'
 const INPUT =
@@ -29,7 +29,41 @@ export function SettingsOverlay({
   onClose: () => void
   onUpdated: (u: User) => void
 }) {
-  const { showToast } = useToast()
+  const { showToast, copy } = useToast()
+  const [apiKeys, setApiKeys] = useState<ApiKey[]>([])
+  const [keyName, setKeyName] = useState('')
+  const [newKey, setNewKey] = useState<string | null>(null)
+  const [keyBusy, setKeyBusy] = useState(false)
+
+  useEffect(() => {
+    keysApi.list().then(setApiKeys).catch(() => {})
+  }, [])
+
+  async function createKey(e: React.FormEvent) {
+    e.preventDefault()
+    if (keyBusy) return
+    setKeyBusy(true)
+    try {
+      const r = await keysApi.create(keyName.trim())
+      setNewKey(r.key)
+      setKeyName('')
+      setApiKeys(await keysApi.list())
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : 'ساختِ کلید ناموفق بود')
+    } finally {
+      setKeyBusy(false)
+    }
+  }
+
+  async function revokeKey(id: string) {
+    try {
+      await keysApi.revoke(id)
+      setApiKeys((prev) => prev.map((k) => (k.id === id ? { ...k, revoked: true } : k)))
+    } catch {
+      showToast('لغوِ کلید ناموفق بود')
+    }
+  }
+
   const [name, setName] = useState(user.name || '')
   const [email, setEmail] = useState(user.email || '')
   const [phone, setPhone] = useState(user.phone || '')
@@ -142,6 +176,80 @@ export function SettingsOverlay({
             {savingPassword ? 'در حال تغییر…' : 'تغییر رمز'}
           </HoverButton>
         </form>
+
+        <div style={css(CARD)}>
+          <div style={css('font-size:.82rem;font-weight:700;color:rgba(245,250,255,.8);')}>کلیدهای API</div>
+          <p style={css('margin:0;font-size:.74rem;color:rgba(245,250,255,.55);line-height:1.8;')}>
+            برای اتصالِ برنامه‌ها به API، از هدرِ <span dir="ltr" style={css('color:#9ecbff;')}>Authorization: Bearer &lt;key&gt;</span> استفاده کن.
+          </p>
+
+          {newKey && (
+            <div style={css('display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:12px;background:rgba(22,122,254,.12);border:1px solid rgba(22,122,254,.4);')}>
+              <div style={css('font-size:.72rem;color:#ffd884;')}>این کلید فقط همین یک‌بار نمایش داده می‌شه — کپی‌اش کن.</div>
+              <div style={css('display:flex;align-items:center;gap:8px;')}>
+                <code dir="ltr" style={css('flex:1;min-width:0;overflow:auto;font-size:.78rem;color:#eaf2ff;background:rgba(8,12,24,.5);border-radius:8px;padding:8px 10px;white-space:nowrap;')}>
+                  {newKey}
+                </code>
+                <HoverButton
+                  onClick={() => copy(newKey, 'کلید کپی شد ✓')}
+                  styleStr="flex:none;padding:.4rem .7rem;border-radius:9px;font-size:.76rem;font-weight:600;cursor:pointer;color:#eaf2ff;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.24);"
+                  hoverStr="background:rgba(255,255,255,.2);"
+                >
+                  کپی
+                </HoverButton>
+              </div>
+            </div>
+          )}
+
+          <form onSubmit={createKey} style={css('display:flex;gap:8px;')}>
+            <input
+              value={keyName}
+              onChange={(e) => setKeyName(e.target.value)}
+              placeholder="نامِ کلید (اختیاری)"
+              style={{ ...css(INPUT), flex: '1' }}
+            />
+            <HoverButton
+              type="submit"
+              disabled={keyBusy}
+              styleStr={
+                'flex:none;display:inline-flex;align-items:center;gap:6px;padding:0 1rem;border-radius:12px;font-weight:700;font-size:.84rem;cursor:pointer;color:#fff;border:1px solid #167afe;background:linear-gradient(180deg,#2488ff,#1460ca);' +
+                (keyBusy ? 'opacity:.7;' : '')
+              }
+              hoverStr="filter:brightness(1.06);"
+            >
+              {keyBusy ? '…' : 'کلیدِ جدید'}
+            </HoverButton>
+          </form>
+
+          {apiKeys.length > 0 && (
+            <div style={css('display:flex;flex-direction:column;gap:7px;')}>
+              {apiKeys.map((k) => (
+                <div
+                  key={k.id}
+                  style={css('display:flex;align-items:center;gap:8px;padding:9px 11px;border-radius:11px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.1);')}
+                >
+                  <code dir="ltr" style={css('font-size:.76rem;color:' + (k.revoked ? 'rgba(245,250,255,.4)' : '#cfe1ff') + ';')}>
+                    {k.prefix}…
+                  </code>
+                  <span style={css('flex:1;min-width:0;font-size:.76rem;color:rgba(245,250,255,.6);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;')}>
+                    {k.name || 'بدون نام'}
+                  </span>
+                  {k.revoked ? (
+                    <span style={css('font-size:.7rem;color:rgba(255,150,150,.8);')}>لغوشده</span>
+                  ) : (
+                    <HoverButton
+                      onClick={() => revokeKey(k.id)}
+                      styleStr="flex:none;padding:.28rem .6rem;border-radius:8px;font-size:.72rem;font-weight:600;cursor:pointer;color:rgba(255,160,160,.9);background:rgba(255,80,80,.08);border:1px solid rgba(255,80,80,.28);"
+                      hoverStr="background:rgba(255,80,80,.2);"
+                    >
+                      لغو
+                    </HoverButton>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

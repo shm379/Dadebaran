@@ -124,7 +124,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       .then((list) => {
         if (!alive) return
         setModels(list)
-        setModelState((cur) => cur || (list[0] ? list[0].id : ''))
+        // Keep the selection on a model the current plan is allowed to use.
+        setModelState((cur) => {
+          const isAllowed = (id: string) => list.some((m) => m.id === id && m.allowed !== false)
+          if (cur && isAllowed(cur)) return cur
+          const firstAllowed = list.find((m) => m.allowed !== false)
+          return firstAllowed ? firstAllowed.id : list[0] ? list[0].id : cur
+        })
       })
       .catch(() => {})
     return () => {

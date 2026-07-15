@@ -110,6 +110,19 @@ API, set three things:
 All client calls already send `credentials: 'include'`, so the cookie session
 works cross-origin once the above are set.
 
+## Access control, API keys, admin
+
+- **Plan-gated models** — the free plan may use only `FREE_MODEL_IDS` (default
+  `nabu-fast`); other models need a paid plan. The picker shows locked models and
+  the server enforces it on `/api/complete` (403 if locked).
+- **Developer API keys** — users issue keys in Settings (shown once). Programs
+  authenticate with `Authorization: Bearer mrc_...` on `/api/complete` (and other
+  protected routes). Keys are stored hashed and can be revoked.
+- **Admin** — set `ADMIN_EMAILS` (comma-separated) to grant admin, or flip
+  `users.is_admin`. Admins get a panel (header shield) with stats and user
+  management: search users, change a user's plan (no payment), toggle admin, and
+  delete users. Endpoints live under `/api/admin/*` behind `requireAdmin`.
+
 ## Connect NabuGate (real answers)
 
 Set these on the backend (Coolify env or `.env`) and completions go to your

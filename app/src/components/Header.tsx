@@ -13,9 +13,20 @@ type HeaderProps = {
   onOpenTasks: () => void
   onOpenVoice: () => void
   onOpenPlans: () => void
+  onOpenAdmin: () => void
+  isAdmin?: boolean
 }
 
-export function Header({ onToggleSidebar, onNewChat, onOpenHistory, onOpenTasks, onOpenVoice, onOpenPlans }: HeaderProps) {
+export function Header({
+  onToggleSidebar,
+  onNewChat,
+  onOpenHistory,
+  onOpenTasks,
+  onOpenVoice,
+  onOpenPlans,
+  onOpenAdmin,
+  isAdmin,
+}: HeaderProps) {
   const { activeBot } = useChat()
   const { tasks, faDigits } = useTasks()
   const botName = cfg[activeBot].name
@@ -36,7 +47,7 @@ export function Header({ onToggleSidebar, onNewChat, onOpenHistory, onOpenTasks,
       </div>
       <div style={css('display:flex;align-items:center;gap:10px;')}>
         <UsageIndicator onOpenPlans={onOpenPlans} />
-        <ModelPicker />
+        <ModelPicker onOpenPlans={onOpenPlans} />
         <HoverButton
           onClick={onOpenPlans}
           title="اشتراک و پلن‌ها"
@@ -48,6 +59,20 @@ export function Header({ onToggleSidebar, onNewChat, onOpenHistory, onOpenTasks,
             <path d="M4 8l4 3 4-5 4 5 4-3-1.5 10.5h-13L4 8z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
           </svg>
         </HoverButton>
+        {isAdmin && (
+          <HoverButton
+            onClick={onOpenAdmin}
+            title="پنلِ ادمین"
+            aria-label="ادمین"
+            styleStr="width:42px;height:42px;display:grid;place-items:center;border-radius:12px;border:1px solid rgba(120,200,120,.5);background:rgba(80,200,120,.12);color:#a7e8b8;cursor:pointer;"
+            hoverStr="border-color:rgba(120,200,120,.9);background:rgba(80,200,120,.22);color:#fff;"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+              <path d="M9 12l2 2 4-4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </HoverButton>
+        )}
         <HoverButton
           onClick={onOpenHistory}
           title="تاریخچه‌ی گفت‌وگوها"

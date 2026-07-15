@@ -56,9 +56,43 @@ export type VoiceState = 'idle' | 'listening' | 'thinking' | 'speaking'
 
 // ---- Auth / billing / models ----
 
-export type User = { id: string; email: string | null; phone: string | null; name: string | null }
+export type User = { id: string; email: string | null; phone: string | null; name: string | null; isAdmin?: boolean }
 
-export type ModelOption = { id: string; label: string; group?: string }
+export type ModelOption = {
+  id: string
+  label: string
+  group?: string
+  allowed?: boolean
+  requiredPlan?: string | null
+}
+
+export type ApiKey = {
+  id: string
+  name: string
+  prefix: string
+  revoked: boolean
+  lastUsedAt: string | null
+  createdAt: string
+}
+
+export type AdminUser = {
+  id: string
+  email: string | null
+  phone: string | null
+  name: string | null
+  isAdmin: boolean
+  createdAt: string
+  plan: string
+  today: number
+}
+
+export type AdminStats = {
+  users: number
+  byPlan: Record<string, number>
+  messagesToday: number
+  apiKeys: number
+  conversations: number
+}
 
 export type PlanLimits = { dailyMessages: number | null }
 

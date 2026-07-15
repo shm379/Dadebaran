@@ -34,8 +34,10 @@ CREATE TABLE IF NOT EXISTS users (
   phone         TEXT,
   name          TEXT,
   password_hash TEXT NOT NULL,
+  is_admin      BOOLEAN NOT NULL DEFAULT false,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT false;
 -- email / phone are each optional, but unique when present (case-insensitive email).
 CREATE UNIQUE INDEX IF NOT EXISTS users_email_key ON users (lower(email)) WHERE email IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS users_phone_key ON users (phone) WHERE phone IS NOT NULL;
@@ -75,6 +77,18 @@ CREATE TABLE IF NOT EXISTS conversations (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS conversations_user_updated ON conversations (user_id, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS api_keys (
+  id           BIGSERIAL PRIMARY KEY,
+  user_id      BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name         TEXT,
+  prefix       TEXT NOT NULL,
+  key_hash     TEXT NOT NULL UNIQUE,
+  revoked      BOOLEAN NOT NULL DEFAULT false,
+  last_used_at TIMESTAMPTZ,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS api_keys_user ON api_keys (user_id);
 `
 
 export async function initDb({ retries = 15, delayMs = 2000 } = {}) {

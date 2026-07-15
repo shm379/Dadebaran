@@ -127,6 +127,23 @@ export function listPlans() {
  *   never left with zero active subscriptions on a partial failure.
  * - real provider (future): return { checkoutUrl } to redirect the user.
  */
+// Admin-granted plan change (no payment). free = clear; paid = activate now.
+export async function grantPlan(userId, planCode) {
+  if (!isValidPlan(planCode)) throw new Error('bad_plan')
+  if (planCode === 'free') {
+    await pool.query(
+      `UPDATE subscriptions SET status = 'canceled', updated_at = now() WHERE user_id = $1 AND status = 'active'`,
+      [userId],
+    )
+    return
+  }
+  const { rows } = await pool.query(
+    `INSERT INTO subscriptions (user_id, plan_code, status, provider) VALUES ($1, $2, 'pending', 'admin') RETURNING id`,
+    [userId, planCode],
+  )
+  await activateSubscription(userId, rows[0].id)
+}
+
 export async function checkout(userId, planCode, opts = {}) {
   if (!isValidPlan(planCode)) {
     return { status: 400, body: { error: 'bad_plan', message: 'پلن نامعتبر است.' } }

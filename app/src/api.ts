@@ -8,7 +8,17 @@
  * thrown as `ApiError` with a stable `code` so the UI can react (show the
  * Persian preview fallback, an upgrade prompt on quota, etc.).
  */
-import type { Conversation, ConvSummary, ModelOption, Plan, SubscriptionStatus, User } from './types'
+import type {
+  AdminStats,
+  AdminUser,
+  ApiKey,
+  Conversation,
+  ConvSummary,
+  ModelOption,
+  Plan,
+  SubscriptionStatus,
+  User,
+} from './types'
 
 // Base URL of the backend. Empty = same-origin (the server serves the SPA and
 // the API together). Set VITE_API_BASE_URL at build time to point the design at
@@ -143,6 +153,38 @@ export const billing = {
     return (await request('/api/subscription/reconcile', postInit({}))) as unknown as SubscriptionStatus & {
       reconciled: boolean
     }
+  },
+}
+
+export const keys = {
+  async list(): Promise<ApiKey[]> {
+    return ((await request('/api/keys')).keys as ApiKey[]) || []
+  },
+  async create(name: string): Promise<{ key: string; meta: ApiKey }> {
+    return (await request('/api/keys', postInit({ name }))) as unknown as { key: string; meta: ApiKey }
+  },
+  async revoke(id: string): Promise<void> {
+    await request('/api/keys/' + id, { method: 'DELETE' })
+  },
+}
+
+export const admin = {
+  async stats(): Promise<AdminStats> {
+    return (await request('/api/admin/stats')) as unknown as AdminStats
+  },
+  async users(query = ''): Promise<AdminUser[]> {
+    const q = query ? '?query=' + encodeURIComponent(query) : ''
+    return ((await request('/api/admin/users' + q)).users as AdminUser[]) || []
+  },
+  async updateUser(id: string, patch: { plan?: string; isAdmin?: boolean }): Promise<void> {
+    await request('/api/admin/users/' + id, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    })
+  },
+  async deleteUser(id: string): Promise<void> {
+    await request('/api/admin/users/' + id, { method: 'DELETE' })
   },
 }
 

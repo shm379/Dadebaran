@@ -13,11 +13,12 @@ import { VoiceOverlay } from './components/overlays/VoiceOverlay'
 import { PlansOverlay } from './components/overlays/PlansOverlay'
 import { SettingsOverlay } from './components/overlays/SettingsOverlay'
 import { HistoryOverlay } from './components/overlays/HistoryOverlay'
+import { AdminOverlay } from './components/overlays/AdminOverlay'
 import type { User } from './types'
 
 export type AppProps = { authUser?: User; onLogout?: () => void; onUserUpdate?: (u: User) => void }
 
-type Overlay = 'tasks' | 'voice' | 'plans' | 'settings' | 'history' | null
+type Overlay = 'tasks' | 'voice' | 'plans' | 'settings' | 'history' | 'admin' | null
 
 const PAGE =
   "height:100vh;display:flex;flex-direction:column;overflow:hidden;font-family:'Vazirmatn',Tahoma,sans-serif;color:#f7fbff;" +
@@ -56,6 +57,8 @@ function Shell({ authUser, onLogout, onUserUpdate }: AppProps) {
         onOpenTasks={() => setOverlay('tasks')}
         onOpenVoice={() => setOverlay('voice')}
         onOpenPlans={() => setOverlay('plans')}
+        onOpenAdmin={() => setOverlay('admin')}
+        isAdmin={authUser?.isAdmin}
       />
       <div style={css(bodyGrid)}>
         <main style={css('min-height:0;min-width:0;display:flex;flex-direction:column;')}>
@@ -77,6 +80,9 @@ function Shell({ authUser, onLogout, onUserUpdate }: AppProps) {
           onClose={() => setOverlay(null)}
           onUpdated={(u) => onUserUpdate && onUserUpdate(u)}
         />
+      )}
+      {overlay === 'admin' && authUser?.isAdmin && (
+        <AdminOverlay onClose={() => setOverlay(null)} currentUserId={authUser.id} />
       )}
     </div>
   )

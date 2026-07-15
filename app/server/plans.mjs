@@ -1,7 +1,15 @@
 // Subscription plans. Defined in code so they're easy to extend; the DB only
 // stores which plan a user is on (see billing.mjs). `limits.dailyMessages: null`
-// means unlimited. Prices are illustrative (Toman) — wire a real provider in
-// billing.mjs when ready.
+// means unlimited. `models` is either '*' (all models) or a list of model ids
+// allowed on that plan — the free plan is limited to FREE_MODEL_IDS. Prices are
+// illustrative (Toman).
+
+// Which model ids the free plan may use. Defaults to the gateway's default model.
+const FREE_MODEL_IDS = (process.env.FREE_MODEL_IDS || process.env.NABUGATE_MODEL || 'nabu-fast')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean)
+
 export const PLANS = [
   {
     code: 'free',
@@ -11,7 +19,8 @@ export const PLANS = [
     priceLabel: 'رایگان',
     period: 'ماهانه',
     limits: { dailyMessages: 20 },
-    features: ['۲۰ پیام در روز', 'دسترسی به دستیارهای پایه', 'مدل پیش‌فرض'],
+    models: FREE_MODEL_IDS,
+    features: ['۲۰ پیام در روز', 'دسترسی به دستیارهای پایه', 'فقط مدلِ پایه'],
   },
   {
     code: 'pro',
@@ -21,7 +30,8 @@ export const PLANS = [
     priceLabel: '۹۹,۰۰۰ تومان',
     period: 'ماهانه',
     limits: { dailyMessages: null },
-    features: ['پیام نامحدود', 'همه‌ی مدل‌ها', 'کارهای زمان‌بندی‌شده', 'آپلود تصویر و ویدیو', 'گفت‌وگوی صوتی'],
+    models: '*',
+    features: ['پیام نامحدود', 'دسترسی به همه‌ی مدل‌ها', 'کارهای زمان‌بندی‌شده', 'آپلود تصویر و ویدیو', 'گفت‌وگوی صوتی'],
   },
   {
     code: 'business',
@@ -31,7 +41,8 @@ export const PLANS = [
     priceLabel: '۳۴۹,۰۰۰ تومان',
     period: 'ماهانه',
     limits: { dailyMessages: null },
-    features: ['همه‌ی امکاناتِ حرفه‌ای', 'چند کاربر', 'پشتیبانی اولویت‌دار', 'اتصال به نبوگیت اختصاصی'],
+    models: '*',
+    features: ['همه‌ی امکاناتِ حرفه‌ای', 'کلیدهای API', 'پشتیبانی اولویت‌دار', 'اتصال به نبوگیت اختصاصی'],
   },
 ]
 
@@ -47,7 +58,21 @@ export function isValidPlan(code) {
   return byCode.has(code)
 }
 
-// Public shape (no internal fields to hide today, but keeps a single seam).
+export function modelAllowedForPlan(planCode, modelId) {
+  const plan = getPlan(planCode)
+  if (plan.models === '*') return true
+  return Array.isArray(plan.models) && plan.models.includes(modelId)
+}
+
+// The cheapest plan that unlocks a model (PLANS is ordered ascending by price).
+export function requiredPlanForModel(modelId) {
+  for (const p of PLANS) {
+    if (p.models === '*' || (Array.isArray(p.models) && p.models.includes(modelId))) return p.code
+  }
+  return 'pro'
+}
+
+// Public shape.
 export function publicPlan(p) {
   return {
     code: p.code,

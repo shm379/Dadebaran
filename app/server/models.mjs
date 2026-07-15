@@ -28,6 +28,18 @@ function humanize(id) {
     .replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
+// NabuGate exposes a multi-model provider's catalog as "<provider>/<model>"
+// (e.g. "parspack/openai/gpt-5.5"). Split on the first "/" so the provider
+// becomes a group and the (possibly still-nested) rest becomes the label.
+function describe(id) {
+  const s = String(id)
+  const slash = s.indexOf('/')
+  if (slash > 0) {
+    return { group: s.slice(0, slash), label: s.slice(slash + 1) }
+  }
+  return { group: '', label: humanize(s) }
+}
+
 async function fetchFromGateway(base) {
   const headers = {}
   if (process.env.NABUGATE_API_KEY) headers.authorization = `Bearer ${process.env.NABUGATE_API_KEY}`
@@ -38,7 +50,13 @@ async function fetchFromGateway(base) {
   const models = list
     .map((m) => (typeof m === 'string' ? { id: m } : m))
     .filter((m) => m && m.id)
-    .map((m) => ({ id: m.id, label: m.label || m.name || humanize(m.id) }))
+    .map((m) => {
+      const d = describe(m.id)
+      const label = m.label || m.name || d.label
+      // Group only namespaced provider models (parspack/…); flat curated
+      // aliases (nabu-fast, …) stay ungrouped at the top of the list.
+      return d.group ? { id: m.id, label, group: d.group } : { id: m.id, label }
+    })
   return models.length ? models : FALLBACK
 }
 

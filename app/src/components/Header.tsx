@@ -1,6 +1,7 @@
 import { css } from '../css'
 import { HoverButton } from './ui/HoverButton'
 import { ModelPicker } from './ModelPicker'
+import { UsageIndicator } from './UsageIndicator'
 import { cfg } from '../config'
 import { useChat } from '../state/ChatProvider'
 import { useTasks } from '../state/TasksProvider'
@@ -33,6 +34,7 @@ export function Header({ onToggleSidebar, onNewChat, onOpenTasks, onOpenVoice, o
         </div>
       </div>
       <div style={css('display:flex;align-items:center;gap:10px;')}>
+        <UsageIndicator onOpenPlans={onOpenPlans} />
         <ModelPicker />
         <HoverButton
           onClick={onOpenPlans}

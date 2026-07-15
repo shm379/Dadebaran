@@ -3,14 +3,17 @@ import { css } from '../../css'
 import { HoverButton } from '../ui/HoverButton'
 import { billing, ApiError } from '../../api'
 import { useToast } from '../../state/ToastProvider'
+import { useBilling } from '../../state/BillingProvider'
 import type { Plan, SubscriptionStatus } from '../../types'
 
 export function PlansOverlay({ onClose }: { onClose: () => void }) {
   const { showToast } = useToast()
+  const { refresh } = useBilling()
   const [plans, setPlans] = useState<Plan[]>([])
   const [status, setStatus] = useState<SubscriptionStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [pending, setPending] = useState<string | null>(null)
+  const [reconciling, setReconciling] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -41,11 +44,27 @@ export function PlansOverlay({ onClose }: { onClose: () => void }) {
         return
       }
       setStatus(next as SubscriptionStatus)
+      refresh()
       showToast(code === 'free' ? 'به پلنِ رایگان برگشتی' : 'اشتراک فعال شد ✓')
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : 'انجام نشد؛ دوباره امتحان کن.')
     } finally {
       setPending(null)
+    }
+  }
+
+  async function reconcile() {
+    if (reconciling) return
+    setReconciling(true)
+    try {
+      const r = await billing.reconcile()
+      setStatus(r)
+      refresh()
+      showToast(r.reconciled ? 'پرداختت پیدا و فعال شد ✓' : 'پرداختِ در انتظاری پیدا نشد.')
+    } catch {
+      showToast('بررسی نشد؛ دوباره امتحان کن.')
+    } finally {
+      setReconciling(false)
     }
   }
 
@@ -144,8 +163,17 @@ export function PlansOverlay({ onClose }: { onClose: () => void }) {
           </div>
         )}
 
-        <div style={css('font-size:.72rem;color:rgba(245,250,255,.42);line-height:1.7;text-align:center;')}>
-          پرداخت در حالتِ نمایشی بلافاصله فعال می‌شود. برای اتصالِ درگاهِ واقعی (زرین‌پال/استرایپ) متغیرِ BILLING_PROVIDER را تنظیم کن.
+        <div style={css('display:flex;flex-direction:column;align-items:center;gap:8px;')}>
+          <button
+            onClick={reconcile}
+            disabled={reconciling}
+            style={css('background:none;border:0;cursor:pointer;color:#60b0ff;font-weight:700;font-family:inherit;font-size:.8rem;')}
+          >
+            {reconciling ? 'در حال بررسی…' : 'پرداخت کردی ولی فعال نشد؟ بررسی کن'}
+          </button>
+          <div style={css('font-size:.72rem;color:rgba(245,250,255,.42);line-height:1.7;text-align:center;')}>
+            با انتخابِ پلنِ پولی به درگاهِ پرداختِ زیبال منتقل می‌شوی. (حالتِ نمایشی بلافاصله فعال می‌کند.)
+          </div>
         </div>
       </div>
     </div>

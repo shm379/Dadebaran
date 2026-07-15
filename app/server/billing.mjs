@@ -127,7 +127,7 @@ export function listPlans() {
  *   never left with zero active subscriptions on a partial failure.
  * - real provider (future): return { checkoutUrl } to redirect the user.
  */
-export async function checkout(userId, planCode) {
+export async function checkout(userId, planCode, opts = {}) {
   if (!isValidPlan(planCode)) {
     return { status: 400, body: { error: 'bad_plan', message: 'پلن نامعتبر است.' } }
   }
@@ -159,6 +159,7 @@ export async function checkout(userId, planCode) {
         amount: plan.price * 10, // Toman -> Rial
         orderId: subId,
         description: `اشتراکِ ${plan.name} — MR.CHATGPT`,
+        mobile: opts.mobile || undefined,
         callbackUrl: `${base}/api/billing/zibal/callback`,
       })
       await pool.query(`UPDATE subscriptions SET provider_ref = $1, updated_at = now() WHERE id = $2`, [trackId, subId])
@@ -207,6 +208,25 @@ export async function verifyAndActivateZibal(trackId) {
   }
   await activateSubscription(sub.user_id, sub.id)
   return { ok: true }
+}
+
+/**
+ * Re-verify the user's most recent pending Zibal payment. Useful when the
+ * browser never returned from the gateway but the payment actually went through.
+ */
+export async function reconcile(userId) {
+  const { rows } = await pool.query(
+    `SELECT provider_ref FROM subscriptions
+      WHERE user_id = $1 AND provider = 'zibal' AND status = 'pending' AND provider_ref IS NOT NULL
+      ORDER BY id DESC LIMIT 1`,
+    [userId],
+  )
+  let reconciled = false
+  if (rows[0]) {
+    const r = await verifyAndActivateZibal(rows[0].provider_ref)
+    reconciled = r.ok
+  }
+  return { status: 200, body: { reconciled, ...(await getStatus(userId)) } }
 }
 
 /** Stop auto-renewal but keep access until the paid period ends. */

@@ -8,10 +8,10 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { initDb, ping } from './db.mjs'
-import { register, login, logout, me, requireAuth } from './auth.mjs'
+import { register, login, logout, me, requireAuth, updateProfile, changePassword } from './auth.mjs'
 import { handleComplete } from './complete.mjs'
 import { listModels } from './models.mjs'
-import { listPlans, getStatus, checkout, cancel, consumeQuota, refundQuota, verifyAndActivateZibal } from './billing.mjs'
+import { listPlans, getStatus, checkout, cancel, reconcile, consumeQuota, refundQuota, verifyAndActivateZibal } from './billing.mjs'
 import { rateLimit } from './ratelimit.mjs'
 
 const DIST = fileURLToPath(new URL('../dist', import.meta.url))
@@ -69,6 +69,8 @@ app.post('/api/auth/register', authLimiter, register)
 app.post('/api/auth/login', authLimiter, login)
 app.post('/api/auth/logout', logout)
 app.get('/api/auth/me', me)
+app.patch('/api/auth/profile', requireAuth, updateProfile)
+app.post('/api/auth/password', requireAuth, changePassword)
 
 // Log the real error server-side, return a generic message to the client.
 function fail(res, status, err, code = 'server') {
@@ -98,7 +100,18 @@ app.get('/api/subscription', requireAuth, async (req, res) => {
 
 app.post('/api/subscription/checkout', requireAuth, async (req, res) => {
   try {
-    const { status, body } = await checkout(req.user.id, (req.body && req.body.plan) || '')
+    const { status, body } = await checkout(req.user.id, (req.body && req.body.plan) || '', {
+      mobile: req.user.phone,
+    })
+    res.status(status).json(body)
+  } catch (err) {
+    fail(res, 503, err)
+  }
+})
+
+app.post('/api/subscription/reconcile', requireAuth, async (req, res) => {
+  try {
+    const { status, body } = await reconcile(req.user.id)
     res.status(status).json(body)
   } catch (err) {
     fail(res, 503, err)

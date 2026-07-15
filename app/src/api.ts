@@ -69,6 +69,17 @@ export const auth = {
   async logout(): Promise<void> {
     await request('/api/auth/logout', postInit({}))
   },
+  async updateProfile(payload: { name?: string; email?: string; phone?: string }): Promise<User> {
+    const data = await request('/api/auth/profile', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    return data.user as User
+  },
+  async changePassword(payload: { currentPassword: string; newPassword: string }): Promise<void> {
+    await request('/api/auth/password', postInit(payload))
+  },
   async me(): Promise<User | null> {
     try {
       const res = await fetch(apiUrl('/api/auth/me'), { credentials: 'include' })
@@ -105,6 +116,11 @@ export const billing = {
   },
   async cancel(): Promise<SubscriptionStatus> {
     return (await request('/api/subscription/cancel', postInit({}))) as unknown as SubscriptionStatus
+  },
+  async reconcile(): Promise<SubscriptionStatus & { reconciled: boolean }> {
+    return (await request('/api/subscription/reconcile', postInit({}))) as unknown as SubscriptionStatus & {
+      reconciled: boolean
+    }
   },
 }
 

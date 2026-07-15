@@ -213,6 +213,63 @@ export async function me(req, res) {
   }
 }
 
+export async function updateProfile(req, res) {
+  const body = req.body || {}
+  const cur = req.user
+  let email = cur.email
+  let phone = cur.phone
+  let name = cur.name
+  if ('email' in body) email = normEmail(body.email)
+  if ('phone' in body) phone = normPhone(body.phone)
+  if ('name' in body) name = typeof body.name === 'string' ? body.name.trim().slice(0, 120) || null : null
+
+  if (!email && !phone) {
+    return res.status(400).json({ error: 'identifier_required', message: 'حداقل یکی از ایمیل یا شماره باید بمونه.' })
+  }
+  if (email && !EMAIL_RE.test(email)) {
+    return res.status(400).json({ error: 'bad_email', message: 'ایمیل معتبر نیست.' })
+  }
+  if (phone && !PHONE_RE.test(phone)) {
+    return res.status(400).json({ error: 'bad_phone', message: 'شماره تلفن معتبر نیست.' })
+  }
+  try {
+    const { rows } = await pool.query(
+      `UPDATE users SET email = $1, phone = $2, name = $3 WHERE id = $4 RETURNING id, email, phone, name`,
+      [email, phone, name, cur.id],
+    )
+    return res.json({ user: publicUser(rows[0]) })
+  } catch (err) {
+    if (err && err.code === '23505') {
+      const which = String(err.constraint || '').includes('phone') ? 'شماره تلفن' : 'ایمیل'
+      return res.status(409).json({ error: 'exists', message: `این ${which} قبلاً توسطِ حسابِ دیگری ثبت شده.` })
+    }
+    console.error('[auth] updateProfile error:', err.message)
+    return res.status(503).json({ error: 'server', message: 'به‌روزرسانی موقتاً ممکن نیست.' })
+  }
+}
+
+export async function changePassword(req, res) {
+  const body = req.body || {}
+  const current = typeof body.currentPassword === 'string' ? body.currentPassword : ''
+  const next = typeof body.newPassword === 'string' ? body.newPassword : ''
+  if (next.length < 6) {
+    return res.status(400).json({ error: 'weak_password', message: 'رمز عبورِ جدید باید حداقل ۶ کاراکتر باشد.' })
+  }
+  try {
+    const { rows } = await pool.query('SELECT password_hash FROM users WHERE id = $1', [req.user.id])
+    const ok = rows[0] ? await bcrypt.compare(current, rows[0].password_hash) : false
+    if (!ok) {
+      return res.status(401).json({ error: 'bad_password', message: 'رمزِ فعلی درست نیست.' })
+    }
+    const hash = await bcrypt.hash(next, SALT_ROUNDS)
+    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [hash, req.user.id])
+    return res.json({ ok: true })
+  } catch (err) {
+    console.error('[auth] changePassword error:', err.message)
+    return res.status(503).json({ error: 'server', message: 'تغییرِ رمز موقتاً ممکن نیست.' })
+  }
+}
+
 // Express middleware: attaches req.user or replies 401.
 export async function requireAuth(req, res, next) {
   try {

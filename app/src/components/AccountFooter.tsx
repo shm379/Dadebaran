@@ -2,7 +2,15 @@ import { css } from '../css'
 import { HoverButton } from './ui/HoverButton'
 import type { User } from '../types'
 
-export function AccountFooter({ user, onLogout }: { user?: User; onLogout?: () => void }) {
+export function AccountFooter({
+  user,
+  onLogout,
+  onOpenSettings,
+}: {
+  user?: User
+  onLogout?: () => void
+  onOpenSettings?: () => void
+}) {
   const label = user ? user.name || user.email || user.phone || 'حساب من' : ''
   return (
     <div style={css('margin-top:auto;padding-top:18px;border-top:1px solid rgba(255,255,255,.08);')}>
@@ -14,6 +22,18 @@ export function AccountFooter({ user, onLogout }: { user?: User; onLogout?: () =
           <span style={css('flex:1;min-width:0;font-size:.82rem;color:#eaf2ff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;')} title={label} dir="auto">
             {label}
           </span>
+          <HoverButton
+            onClick={() => onOpenSettings && onOpenSettings()}
+            aria-label="تنظیماتِ حساب"
+            title="تنظیماتِ حساب"
+            styleStr="flex:none;width:30px;height:30px;display:grid;place-items:center;border-radius:9px;cursor:pointer;color:#cfe1ff;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.16);"
+            hoverStr="background:rgba(255,255,255,.16);color:#fff;"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8" />
+              <path d="M12 3.5v2M12 18.5v2M3.5 12h2M18.5 12h2M6 6l1.4 1.4M16.6 16.6L18 18M18 6l-1.4 1.4M7.4 16.6L6 18" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+          </HoverButton>
           <HoverButton
             onClick={() => onLogout && onLogout()}
             aria-label="خروج"

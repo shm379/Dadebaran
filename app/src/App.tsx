@@ -3,6 +3,7 @@ import { css } from './css'
 import { ToastProvider, useToast } from './state/ToastProvider'
 import { ChatProvider, useChat } from './state/ChatProvider'
 import { TasksProvider } from './state/TasksProvider'
+import { BillingProvider } from './state/BillingProvider'
 import { Header } from './components/Header'
 import { Sidebar } from './components/Sidebar'
 import { ChatArea } from './components/ChatArea'
@@ -10,18 +11,19 @@ import { Composer } from './components/Composer'
 import { TasksOverlay } from './components/overlays/TasksOverlay'
 import { VoiceOverlay } from './components/overlays/VoiceOverlay'
 import { PlansOverlay } from './components/overlays/PlansOverlay'
+import { SettingsOverlay } from './components/overlays/SettingsOverlay'
 import type { User } from './types'
 
-export type AppProps = { authUser?: User; onLogout?: () => void }
+export type AppProps = { authUser?: User; onLogout?: () => void; onUserUpdate?: (u: User) => void }
 
-type Overlay = 'tasks' | 'voice' | 'plans' | null
+type Overlay = 'tasks' | 'voice' | 'plans' | 'settings' | null
 
 const PAGE =
   "height:100vh;display:flex;flex-direction:column;overflow:hidden;font-family:'Vazirmatn',Tahoma,sans-serif;color:#f7fbff;" +
   'background:radial-gradient(circle at 18% -10%,rgba(22,122,254,.34),transparent 46%),' +
   'radial-gradient(circle at 84% 116%,rgba(22,122,254,.2),transparent 56%),#101424;'
 
-function Shell({ authUser, onLogout }: AppProps) {
+function Shell({ authUser, onLogout, onUserUpdate }: AppProps) {
   const { newChat } = useChat()
   const { showToast } = useToast()
   const [showSidebar, setShowSidebar] = useState(true)
@@ -58,23 +60,34 @@ function Shell({ authUser, onLogout }: AppProps) {
           <ChatArea />
           <Composer />
         </main>
-        {showSidebar && <Sidebar user={authUser} onLogout={onLogout} />}
+        {showSidebar && (
+          <Sidebar user={authUser} onLogout={onLogout} onOpenSettings={() => setOverlay('settings')} />
+        )}
       </div>
 
       {overlay === 'tasks' && <TasksOverlay onClose={() => setOverlay(null)} />}
       {overlay === 'voice' && <VoiceOverlay onClose={() => setOverlay(null)} />}
       {overlay === 'plans' && <PlansOverlay onClose={() => setOverlay(null)} />}
+      {overlay === 'settings' && authUser && (
+        <SettingsOverlay
+          user={authUser}
+          onClose={() => setOverlay(null)}
+          onUpdated={(u) => onUserUpdate && onUserUpdate(u)}
+        />
+      )}
     </div>
   )
 }
 
-export default function App({ authUser, onLogout }: AppProps) {
+export default function App({ authUser, onLogout, onUserUpdate }: AppProps) {
   return (
     <ToastProvider>
       <ChatProvider>
-        <TasksProvider>
-          <Shell authUser={authUser} onLogout={onLogout} />
-        </TasksProvider>
+        <BillingProvider>
+          <TasksProvider>
+            <Shell authUser={authUser} onLogout={onLogout} onUserUpdate={onUserUpdate} />
+          </TasksProvider>
+        </BillingProvider>
       </ChatProvider>
     </ToastProvider>
   )

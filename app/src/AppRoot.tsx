@@ -59,5 +59,5 @@ export default function AppRoot() {
     )
   }
 
-  return <App authUser={user} onLogout={logout} />
+  return <App authUser={user} onLogout={logout} onUserUpdate={setUser} />
 }

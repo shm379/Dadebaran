@@ -15,6 +15,8 @@ import { currentPlanCode, listPlans, getStatus, checkout, cancel, reconcile, con
 import { modelAllowedForPlan, requiredPlanForModel } from './plans.mjs'
 import { listKeys, createKey, revokeKey } from './apikeys.mjs'
 import { adminStats, adminUsers, adminUpdateUser, adminDeleteUser } from './admin.mjs'
+import { adminAnalytics, recordModelUsage } from './analytics.mjs'
+import { defaultModel } from './models.mjs'
 import {
   listConversations,
   getConversation,
@@ -116,6 +118,7 @@ app.delete('/api/keys/:id', requireAuth, revokeKey)
 
 // ---- Admin ----
 app.get('/api/admin/stats', requireAuth, requireAdmin, adminStats)
+app.get('/api/admin/analytics', requireAuth, requireAdmin, adminAnalytics)
 app.get('/api/admin/users', requireAuth, requireAdmin, adminUsers)
 app.patch('/api/admin/users/:id', requireAuth, requireAdmin, adminUpdateUser)
 app.delete('/api/admin/users/:id', requireAuth, requireAdmin, adminDeleteUser)
@@ -199,11 +202,15 @@ app.post('/api/complete', requireAuth, async (req, res) => {
         usage: quota,
       })
     }
-    reserved = quota.limit != null
+    // A slot was recorded for every allowed message (limited and unlimited).
+    reserved = true
     const { status, body } = await handleComplete(req.body)
     if (status !== 200 && reserved) {
       // The model call failed — don't bill the reserved slot.
       await refundQuota(req.user.id).catch((e) => console.warn('[usage] refund failed:', e.message))
+    }
+    if (status === 200) {
+      recordModelUsage(requestedModel || defaultModel())
     }
     res.status(status).json(body)
   } catch (err) {

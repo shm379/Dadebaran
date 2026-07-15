@@ -72,7 +72,16 @@ async function usageToday(userId) {
 export async function consumeQuota(userId) {
   const planCode = await currentPlanCode(userId)
   const limit = getPlan(planCode).limits.dailyMessages // null = unlimited
-  if (limit == null) return { allowed: true, used: null, limit: null, planCode }
+  if (limit == null) {
+    // Unlimited plans are always allowed, but we still record the message so
+    // analytics and per-user totals include paid users.
+    await pool.query(
+      `INSERT INTO usage_daily (user_id, day, count) VALUES ($1, CURRENT_DATE, 1)
+       ON CONFLICT (user_id, day) DO UPDATE SET count = usage_daily.count + 1`,
+      [userId],
+    )
+    return { allowed: true, used: null, limit: null, planCode }
+  }
   const { rows } = await pool.query(
     `INSERT INTO usage_daily (user_id, day, count)
      VALUES ($1, CURRENT_DATE, 1)

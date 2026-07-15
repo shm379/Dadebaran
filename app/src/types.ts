@@ -94,6 +94,19 @@ export type AdminStats = {
   conversations: number
 }
 
+export type DayPoint = { day: string; count: number }
+
+export type AdminAnalytics = {
+  days: number
+  messagesByDay: DayPoint[]
+  newUsersByDay: DayPoint[]
+  topModels: { model: string; count: number }[]
+  topUsers: { id: string; label: string; count: number }[]
+  activeToday: number
+  activeWeek: number
+  totalMessages: number
+}
+
 export type PlanLimits = { dailyMessages: number | null }
 
 export type Plan = {

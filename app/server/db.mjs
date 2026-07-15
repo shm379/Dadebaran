@@ -67,6 +67,13 @@ CREATE TABLE IF NOT EXISTS usage_daily (
   PRIMARY KEY (user_id, day)
 );
 
+CREATE TABLE IF NOT EXISTS model_usage_daily (
+  day   DATE NOT NULL DEFAULT CURRENT_DATE,
+  model TEXT NOT NULL,
+  count INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (day, model)
+);
+
 CREATE TABLE IF NOT EXISTS conversations (
   id         BIGSERIAL PRIMARY KEY,
   user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

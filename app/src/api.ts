@@ -9,6 +9,7 @@
  * Persian preview fallback, an upgrade prompt on quota, etc.).
  */
 import type {
+  AdminAnalytics,
   AdminStats,
   AdminUser,
   ApiKey,
@@ -171,6 +172,9 @@ export const keys = {
 export const admin = {
   async stats(): Promise<AdminStats> {
     return (await request('/api/admin/stats')) as unknown as AdminStats
+  },
+  async analytics(days = 14): Promise<AdminAnalytics> {
+    return (await request('/api/admin/analytics?days=' + days)) as unknown as AdminAnalytics
   },
   async users(query = ''): Promise<AdminUser[]> {
     const q = query ? '?query=' + encodeURIComponent(query) : ''

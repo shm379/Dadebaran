@@ -3,6 +3,7 @@ import { css } from '../../css'
 import { HoverButton } from '../ui/HoverButton'
 import { admin, billing, ApiError } from '../../api'
 import { useToast } from '../../state/ToastProvider'
+import { Analytics } from '../admin/Analytics'
 import type { AdminStats, AdminUser, Plan } from '../../types'
 
 const FA = '۰۱۲۳۴۵۶۷۸۹'
@@ -102,6 +103,12 @@ export function AdminOverlay({ onClose, currentUserId }: { onClose: () => void; 
             <Stat label="گفت‌وگوها" value={fa(stats.conversations)} />
           </div>
         )}
+
+        <Analytics />
+
+        <div style={css('height:1px;background:rgba(255,255,255,.08);')} />
+        <div style={css('font-size:.9rem;font-weight:800;color:#f3f8ff;')}>کاربران</div>
+
 
         <input
           value={query}

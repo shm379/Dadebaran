@@ -19,9 +19,9 @@ function micBtnStyle(active: boolean) {
 }
 
 export function Composer() {
-  const { activeBot, bots, busy, send, resetToken } = useChat()
+  const { activeBot, settings, busy, send, resetToken } = useChat()
   const c = cfg[activeBot]
-  const settings = bots[activeBot].settings
+  const botSettings = settings[activeBot]
 
   const [input, setInput] = useState('')
   const taRef = useRef<HTMLTextAreaElement | null>(null)
@@ -41,7 +41,7 @@ export function Composer() {
 
   const settingsSummary = c.fields
     .map((f) => {
-      const opt = f.options.find((o) => o.v === settings[f.key])
+      const opt = f.options.find((o) => o.v === botSettings[f.key])
       return opt ? opt.l || opt.v : ''
     })
     .filter(Boolean)

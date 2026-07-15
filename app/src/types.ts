@@ -75,6 +75,9 @@ export type Plan = {
 
 export type UsageInfo = { used: number; limit: number | null; remaining: number | null }
 
+export type ConvSummary = { id: string; botId: BotId; title: string; updatedAt: string; messageCount: number }
+export type Conversation = { id: string; botId: BotId; title: string; messages: Msg[]; updatedAt: string }
+
 export type SubscriptionStatus = {
   plan: Plan
   subscription: {

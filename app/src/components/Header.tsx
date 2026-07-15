@@ -9,12 +9,13 @@ import { useTasks } from '../state/TasksProvider'
 type HeaderProps = {
   onToggleSidebar: () => void
   onNewChat: () => void
+  onOpenHistory: () => void
   onOpenTasks: () => void
   onOpenVoice: () => void
   onOpenPlans: () => void
 }
 
-export function Header({ onToggleSidebar, onNewChat, onOpenTasks, onOpenVoice, onOpenPlans }: HeaderProps) {
+export function Header({ onToggleSidebar, onNewChat, onOpenHistory, onOpenTasks, onOpenVoice, onOpenPlans }: HeaderProps) {
   const { activeBot } = useChat()
   const { tasks, faDigits } = useTasks()
   const botName = cfg[activeBot].name
@@ -45,6 +46,17 @@ export function Header({ onToggleSidebar, onNewChat, onOpenTasks, onOpenVoice, o
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
             <path d="M4 8l4 3 4-5 4 5 4-3-1.5 10.5h-13L4 8z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+          </svg>
+        </HoverButton>
+        <HoverButton
+          onClick={onOpenHistory}
+          title="تاریخچه‌ی گفت‌وگوها"
+          aria-label="تاریخچه"
+          styleStr="width:42px;height:42px;display:grid;place-items:center;border-radius:12px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.04);color:#dce8ff;cursor:pointer;"
+          hoverStr="border-color:rgba(255,255,255,.45);"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+            <path d="M4 6h16M4 12h11M4 18h7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
         </HoverButton>
         <HoverButton

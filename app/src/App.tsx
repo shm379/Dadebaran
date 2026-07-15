@@ -12,11 +12,12 @@ import { TasksOverlay } from './components/overlays/TasksOverlay'
 import { VoiceOverlay } from './components/overlays/VoiceOverlay'
 import { PlansOverlay } from './components/overlays/PlansOverlay'
 import { SettingsOverlay } from './components/overlays/SettingsOverlay'
+import { HistoryOverlay } from './components/overlays/HistoryOverlay'
 import type { User } from './types'
 
 export type AppProps = { authUser?: User; onLogout?: () => void; onUserUpdate?: (u: User) => void }
 
-type Overlay = 'tasks' | 'voice' | 'plans' | 'settings' | null
+type Overlay = 'tasks' | 'voice' | 'plans' | 'settings' | 'history' | null
 
 const PAGE =
   "height:100vh;display:flex;flex-direction:column;overflow:hidden;font-family:'Vazirmatn',Tahoma,sans-serif;color:#f7fbff;" +
@@ -51,6 +52,7 @@ function Shell({ authUser, onLogout, onUserUpdate }: AppProps) {
       <Header
         onToggleSidebar={() => setShowSidebar((s) => !s)}
         onNewChat={newChat}
+        onOpenHistory={() => setOverlay('history')}
         onOpenTasks={() => setOverlay('tasks')}
         onOpenVoice={() => setOverlay('voice')}
         onOpenPlans={() => setOverlay('plans')}
@@ -65,6 +67,7 @@ function Shell({ authUser, onLogout, onUserUpdate }: AppProps) {
         )}
       </div>
 
+      {overlay === 'history' && <HistoryOverlay onClose={() => setOverlay(null)} />}
       {overlay === 'tasks' && <TasksOverlay onClose={() => setOverlay(null)} />}
       {overlay === 'voice' && <VoiceOverlay onClose={() => setOverlay(null)} />}
       {overlay === 'plans' && <PlansOverlay onClose={() => setOverlay(null)} />}

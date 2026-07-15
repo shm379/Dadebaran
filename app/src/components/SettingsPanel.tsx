@@ -3,8 +3,8 @@ import { cfg } from '../config'
 import { useChat } from '../state/ChatProvider'
 
 export function SettingsPanel() {
-  const { activeBot, bots, setSetting } = useChat()
-  const settings = bots[activeBot].settings
+  const { activeBot, settings, setSetting } = useChat()
+  const botSettings = settings[activeBot]
   const fields = cfg[activeBot].fields
 
   return (
@@ -18,7 +18,7 @@ export function SettingsPanel() {
             <div style={css('font-size:.78rem;color:rgba(245,250,255,.72);margin-bottom:8px;font-weight:600;')}>{f.label}</div>
             <div style={css('display:flex;flex-wrap:wrap;gap:7px;')}>
               {f.options.map((o, oi) => {
-                const active = settings[f.key] === o.v
+                const active = botSettings[f.key] === o.v
                 return (
                   <button
                     key={oi}

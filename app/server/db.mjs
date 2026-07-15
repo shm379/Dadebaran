@@ -64,6 +64,17 @@ CREATE TABLE IF NOT EXISTS usage_daily (
   count   INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (user_id, day)
 );
+
+CREATE TABLE IF NOT EXISTS conversations (
+  id         BIGSERIAL PRIMARY KEY,
+  user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  bot_id     TEXT NOT NULL,
+  title      TEXT,
+  messages   JSONB NOT NULL DEFAULT '[]',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS conversations_user_updated ON conversations (user_id, updated_at DESC);
 `
 
 export async function initDb({ retries = 15, delayMs = 2000 } = {}) {

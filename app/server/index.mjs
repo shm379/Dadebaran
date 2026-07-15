@@ -12,6 +12,13 @@ import { register, login, logout, me, requireAuth, updateProfile, changePassword
 import { handleComplete } from './complete.mjs'
 import { listModels } from './models.mjs'
 import { listPlans, getStatus, checkout, cancel, reconcile, consumeQuota, refundQuota, verifyAndActivateZibal } from './billing.mjs'
+import {
+  listConversations,
+  getConversation,
+  createConversation,
+  updateConversation,
+  deleteConversation,
+} from './conversations.mjs'
 import { rateLimit } from './ratelimit.mjs'
 
 const DIST = fileURLToPath(new URL('../dist', import.meta.url))
@@ -77,6 +84,13 @@ function fail(res, status, err, code = 'server') {
   console.error('[api] error:', err && err.message ? err.message : err)
   res.status(status).json({ error: code })
 }
+
+// ---- Conversation history ----
+app.get('/api/conversations', requireAuth, listConversations)
+app.post('/api/conversations', requireAuth, createConversation)
+app.get('/api/conversations/:id', requireAuth, getConversation)
+app.patch('/api/conversations/:id', requireAuth, updateConversation)
+app.delete('/api/conversations/:id', requireAuth, deleteConversation)
 
 // ---- Models ----
 app.get('/api/models', requireAuth, async (_req, res) => {

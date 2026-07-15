@@ -5,8 +5,7 @@ import { Hero } from './Hero'
 import { MessageItem } from './MessageItem'
 
 export function ChatArea() {
-  const { activeBot, bots } = useChat()
-  const messages = bots[activeBot].messages
+  const { activeBot, messages } = useChat()
   const scrollRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {

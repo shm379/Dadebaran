@@ -8,7 +8,7 @@
  * thrown as `ApiError` with a stable `code` so the UI can react (show the
  * Persian preview fallback, an upgrade prompt on quota, etc.).
  */
-import type { ModelOption, Plan, SubscriptionStatus, User } from './types'
+import type { Conversation, ConvSummary, ModelOption, Plan, SubscriptionStatus, User } from './types'
 
 // Base URL of the backend. Empty = same-origin (the server serves the SPA and
 // the API together). Set VITE_API_BASE_URL at build time to point the design at
@@ -96,6 +96,28 @@ export const models = {
   async list(): Promise<ModelOption[]> {
     const data = await request('/api/models')
     return (data.models as ModelOption[]) || []
+  },
+}
+
+export const conversations = {
+  async list(): Promise<ConvSummary[]> {
+    return ((await request('/api/conversations')).conversations as ConvSummary[]) || []
+  },
+  async get(id: string): Promise<Conversation> {
+    return (await request('/api/conversations/' + id)).conversation as Conversation
+  },
+  async create(payload: { botId: string; title?: string; messages: unknown[] }): Promise<{ id: string }> {
+    return (await request('/api/conversations', postInit(payload))) as unknown as { id: string }
+  },
+  async update(id: string, payload: { title?: string; messages?: unknown[] }): Promise<void> {
+    await request('/api/conversations/' + id, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  },
+  async remove(id: string): Promise<void> {
+    await request('/api/conversations/' + id, { method: 'DELETE' })
   },
 }
 

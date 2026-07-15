@@ -58,7 +58,7 @@ export type VoiceState = 'idle' | 'listening' | 'thinking' | 'speaking'
 
 export type User = { id: string; email: string | null; phone: string | null; name: string | null }
 
-export type ModelOption = { id: string; label: string }
+export type ModelOption = { id: string; label: string; group?: string }
 
 export type PlanLimits = { dailyMessages: number | null }
 

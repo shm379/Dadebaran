@@ -13,6 +13,7 @@ import type {
   AdminStats,
   AdminUser,
   ApiKey,
+  AuditEntry,
   Conversation,
   ConvSummary,
   ModelOption,
@@ -189,6 +190,9 @@ export const admin = {
   },
   async deleteUser(id: string): Promise<void> {
     await request('/api/admin/users/' + id, { method: 'DELETE' })
+  },
+  async audit(): Promise<AuditEntry[]> {
+    return ((await request('/api/admin/audit')).entries as AuditEntry[]) || []
   },
 }
 

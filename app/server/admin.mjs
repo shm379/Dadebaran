@@ -4,6 +4,28 @@ import { pool } from './db.mjs'
 import { DEFAULT_PLAN } from './plans.mjs'
 import { grantPlan } from './billing.mjs'
 
+function actorLabel(u) {
+  return u.email || u.phone || u.name || '#' + u.id
+}
+
+async function recordAudit(actor, action, targetUserId, targetLabel, detail) {
+  try {
+    await pool.query(
+      `INSERT INTO admin_audit (actor_id, actor_label, action, target_user_id, target_label, detail)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [actor.id, actorLabel(actor), action, targetUserId, targetLabel || null, detail || null],
+    )
+  } catch (err) {
+    console.warn('[admin] audit failed:', err.message)
+  }
+}
+
+async function targetLabelFor(id) {
+  const { rows } = await pool.query('SELECT email, phone, name FROM users WHERE id = $1', [id])
+  const r = rows[0]
+  return r ? r.email || r.phone || r.name || '#' + id : '#' + id
+}
+
 export async function adminStats(_req, res) {
   try {
     const [users, subs, msgs, keys, convs] = await Promise.all([
@@ -72,9 +94,11 @@ export async function adminUpdateUser(req, res) {
   try {
     if (typeof body.isAdmin === 'boolean') {
       await pool.query('UPDATE users SET is_admin = $1 WHERE id = $2', [body.isAdmin, id])
+      await recordAudit(req.user, 'set_admin', id, await targetLabelFor(id), body.isAdmin ? 'true' : 'false')
     }
     if (typeof body.plan === 'string' && body.plan) {
       await grantPlan(id, body.plan)
+      await recordAudit(req.user, 'change_plan', id, await targetLabelFor(id), body.plan)
     }
     res.json({ ok: true })
   } catch (err) {
@@ -90,11 +114,34 @@ export async function adminDeleteUser(req, res) {
     return res.status(400).json({ error: 'self', message: 'نمی‌تونی حسابِ خودت رو حذف کنی.' })
   }
   try {
+    const label = await targetLabelFor(id) // capture before deletion
     const { rowCount } = await pool.query('DELETE FROM users WHERE id = $1', [id])
     if (!rowCount) return res.status(404).json({ error: 'not_found' })
+    await recordAudit(req.user, 'delete_user', id, label, null)
     res.json({ ok: true })
   } catch (err) {
     console.error('[admin] delete error:', err.message)
+    res.status(503).json({ error: 'server' })
+  }
+}
+
+export async function adminAuditLog(_req, res) {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, actor_label, action, target_label, detail, created_at FROM admin_audit ORDER BY id DESC LIMIT 100`,
+    )
+    res.json({
+      entries: rows.map((r) => ({
+        id: String(r.id),
+        actor: r.actor_label,
+        action: r.action,
+        target: r.target_label,
+        detail: r.detail,
+        createdAt: r.created_at,
+      })),
+    })
+  } catch (err) {
+    console.error('[admin] audit list error:', err.message)
     res.status(503).json({ error: 'server' })
   }
 }

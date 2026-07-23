@@ -67,6 +67,31 @@ CREATE TABLE IF NOT EXISTS usage_daily (
   PRIMARY KEY (user_id, day)
 );
 
+CREATE TABLE IF NOT EXISTS payments (
+  id         BIGSERIAL PRIMARY KEY,
+  user_id    BIGINT REFERENCES users(id) ON DELETE SET NULL,
+  plan_code  TEXT,
+  amount     BIGINT NOT NULL DEFAULT 0,   -- Rial
+  currency   TEXT NOT NULL DEFAULT 'IRR',
+  provider   TEXT NOT NULL DEFAULT 'zibal',
+  ref        TEXT,
+  track_id   TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS payments_created ON payments (created_at DESC);
+
+CREATE TABLE IF NOT EXISTS admin_audit (
+  id             BIGSERIAL PRIMARY KEY,
+  actor_id       BIGINT,
+  actor_label    TEXT,
+  action         TEXT NOT NULL,
+  target_user_id BIGINT,
+  target_label   TEXT,
+  detail         TEXT,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS admin_audit_created ON admin_audit (created_at DESC);
+
 CREATE TABLE IF NOT EXISTS model_usage_daily (
   day   DATE NOT NULL DEFAULT CURRENT_DATE,
   model TEXT NOT NULL,

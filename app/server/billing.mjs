@@ -216,10 +216,22 @@ export async function checkout(userId, planCode, opts = {}) {
  * subscription is a no-op success.
  * @returns {Promise<{ok:boolean, reason?:string}>}
  */
+// Record a completed payment (best-effort; drives revenue analytics).
+export async function recordPayment({ userId, planCode, amount, provider = 'zibal', ref = null, trackId = null }) {
+  try {
+    await pool.query(
+      `INSERT INTO payments (user_id, plan_code, amount, currency, provider, ref, track_id) VALUES ($1, $2, $3, 'IRR', $4, $5, $6)`,
+      [userId, planCode, Math.round(amount || 0), provider, ref, trackId],
+    )
+  } catch (err) {
+    console.warn('[billing] recordPayment failed:', err.message)
+  }
+}
+
 export async function verifyAndActivateZibal(trackId) {
   if (!trackId) return { ok: false, reason: 'no_track' }
   const { rows } = await pool.query(
-    `SELECT id, user_id, status FROM subscriptions WHERE provider = 'zibal' AND provider_ref = $1 ORDER BY id DESC LIMIT 1`,
+    `SELECT id, user_id, plan_code, status FROM subscriptions WHERE provider = 'zibal' AND provider_ref = $1 ORDER BY id DESC LIMIT 1`,
     [trackId],
   )
   const sub = rows[0]
@@ -233,6 +245,14 @@ export async function verifyAndActivateZibal(trackId) {
     return { ok: false, reason: 'not_paid' }
   }
   await activateSubscription(sub.user_id, sub.id)
+  await recordPayment({
+    userId: sub.user_id,
+    planCode: sub.plan_code,
+    amount: v.amount || getPlan(sub.plan_code).price * 10,
+    provider: 'zibal',
+    ref: v.refNumber || null,
+    trackId,
+  })
   return { ok: true }
 }
 

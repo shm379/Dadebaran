@@ -14,7 +14,7 @@ import { listModels } from './models.mjs'
 import { currentPlanCode, listPlans, getStatus, checkout, cancel, reconcile, consumeQuota, refundQuota, verifyAndActivateZibal } from './billing.mjs'
 import { modelAllowedForPlan, requiredPlanForModel } from './plans.mjs'
 import { listKeys, createKey, revokeKey } from './apikeys.mjs'
-import { adminStats, adminUsers, adminUpdateUser, adminDeleteUser } from './admin.mjs'
+import { adminStats, adminUsers, adminUpdateUser, adminDeleteUser, adminAuditLog } from './admin.mjs'
 import { adminAnalytics, recordModelUsage } from './analytics.mjs'
 import { defaultModel } from './models.mjs'
 import {
@@ -122,6 +122,7 @@ app.get('/api/admin/analytics', requireAuth, requireAdmin, adminAnalytics)
 app.get('/api/admin/users', requireAuth, requireAdmin, adminUsers)
 app.patch('/api/admin/users/:id', requireAuth, requireAdmin, adminUpdateUser)
 app.delete('/api/admin/users/:id', requireAuth, requireAdmin, adminDeleteUser)
+app.get('/api/admin/audit', requireAuth, requireAdmin, adminAuditLog)
 
 // ---- Billing / subscription ----
 app.get('/api/plans', (_req, res) => res.json({ plans: listPlans() }))

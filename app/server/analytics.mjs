@@ -24,7 +24,7 @@ export async function adminAnalytics(req, res) {
   const days = Math.min(90, Math.max(1, parseInt(req.query.days, 10) || 14))
   const span = days - 1
   try {
-    const [messages, newUsers, topModels, topUsers, active] = await Promise.all([
+    const [messages, newUsers, topModels, topUsers, active, revenue] = await Promise.all([
       pool.query(
         `SELECT to_char(d::date, 'YYYY-MM-DD') AS day, coalesce(u.c, 0)::int AS count
            FROM generate_series(CURRENT_DATE - $1::int, CURRENT_DATE, interval '1 day') d
@@ -56,7 +56,15 @@ export async function adminAnalytics(req, res) {
            (SELECT count(DISTINCT user_id) FROM usage_daily WHERE day = CURRENT_DATE)::int AS today,
            (SELECT count(DISTINCT user_id) FROM usage_daily WHERE day >= CURRENT_DATE - 6)::int AS week`,
       ),
+      pool.query(
+        `SELECT to_char(d::date, 'YYYY-MM-DD') AS day, coalesce(r.a, 0)::bigint AS amount
+           FROM generate_series(CURRENT_DATE - $1::int, CURRENT_DATE, interval '1 day') d
+           LEFT JOIN (SELECT created_at::date AS day, sum(amount) a FROM payments GROUP BY 1) r ON r.day = d::date
+          ORDER BY d`,
+        [span],
+      ),
     ])
+    const revenueByDay = revenue.rows.map((r) => ({ day: r.day, amount: Number(r.amount) }))
     res.json({
       days,
       messagesByDay: messages.rows,
@@ -66,6 +74,8 @@ export async function adminAnalytics(req, res) {
       activeToday: active.rows[0].today,
       activeWeek: active.rows[0].week,
       totalMessages: messages.rows.reduce((s, r) => s + r.count, 0),
+      revenueByDay,
+      totalRevenue: revenueByDay.reduce((s, r) => s + r.amount, 0),
     })
   } catch (err) {
     console.error('[admin] analytics error:', err.message)

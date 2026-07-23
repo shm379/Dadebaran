@@ -4,10 +4,18 @@ import { HoverButton } from '../ui/HoverButton'
 import { admin, billing, ApiError } from '../../api'
 import { useToast } from '../../state/ToastProvider'
 import { Analytics } from '../admin/Analytics'
-import type { AdminStats, AdminUser, Plan } from '../../types'
+import type { AdminStats, AdminUser, AuditEntry, Plan } from '../../types'
 
 const FA = '۰۱۲۳۴۵۶۷۸۹'
 const fa = (s: string | number) => String(s).replace(/[0-9]/g, (d) => FA[+d])
+
+const timeFa = (iso: string) => {
+  try {
+    return new Intl.DateTimeFormat('fa-IR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(iso))
+  } catch {
+    return iso
+  }
+}
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
@@ -23,15 +31,20 @@ export function AdminOverlay({ onClose, currentUserId }: { onClose: () => void; 
   const [stats, setStats] = useState<AdminStats | null>(null)
   const [users, setUsers] = useState<AdminUser[]>([])
   const [plans, setPlans] = useState<Plan[]>([])
+  const [audit, setAudit] = useState<AuditEntry[]>([])
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(true)
 
   const loadUsers = (q: string) => admin.users(q).then(setUsers).catch(() => {})
+  const loadAudit = () => admin.audit().then(setAudit).catch(() => {})
 
   useEffect(() => {
-    Promise.all([admin.stats().then(setStats).catch(() => {}), billing.plans().then(setPlans).catch(() => {}), loadUsers('')]).finally(
-      () => setLoading(false),
-    )
+    Promise.all([
+      admin.stats().then(setStats).catch(() => {}),
+      billing.plans().then(setPlans).catch(() => {}),
+      loadUsers(''),
+      loadAudit(),
+    ]).finally(() => setLoading(false))
   }, [])
 
   async function changePlan(u: AdminUser, plan: string) {
@@ -39,6 +52,7 @@ export function AdminOverlay({ onClose, currentUserId }: { onClose: () => void; 
       await admin.updateUser(u.id, { plan })
       setUsers((prev) => prev.map((x) => (x.id === u.id ? { ...x, plan } : x)))
       showToast('پلن تغییر کرد ✓')
+      loadAudit()
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : 'تغییر نشد')
     }
@@ -48,6 +62,7 @@ export function AdminOverlay({ onClose, currentUserId }: { onClose: () => void; 
     try {
       await admin.updateUser(u.id, { isAdmin: !u.isAdmin })
       setUsers((prev) => prev.map((x) => (x.id === u.id ? { ...x, isAdmin: !u.isAdmin } : x)))
+      loadAudit()
     } catch {
       showToast('انجام نشد')
     }
@@ -58,12 +73,20 @@ export function AdminOverlay({ onClose, currentUserId }: { onClose: () => void; 
       await admin.deleteUser(u.id)
       setUsers((prev) => prev.filter((x) => x.id !== u.id))
       showToast('کاربر حذف شد')
+      loadAudit()
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : 'حذف نشد')
     }
   }
 
   const planName = (code: string) => plans.find((p) => p.code === code)?.name || code
+
+  const auditText = (e: AuditEntry) => {
+    if (e.action === 'set_admin') return e.detail === 'true' ? 'اعطای دسترسیِ ادمین' : 'لغوِ دسترسیِ ادمین'
+    if (e.action === 'change_plan') return 'تغییرِ پلن به ' + planName(e.detail || '')
+    if (e.action === 'delete_user') return 'حذفِ کاربر'
+    return e.action
+  }
 
   return (
     <div style={css('position:fixed;inset:0;z-index:60;display:flex;align-items:flex-start;justify-content:center;padding:4vh 16px;overflow-y:auto;background:radial-gradient(circle at 50% 0%,rgba(22,122,254,.18),transparent 55%),rgba(8,10,20,.88);backdrop-filter:blur(16px);')}>
@@ -183,6 +206,41 @@ export function AdminOverlay({ onClose, currentUserId }: { onClose: () => void; 
             )}
           </div>
         )}
+
+        <div style={css('height:1px;background:rgba(255,255,255,.08);')} />
+        <div style={css('display:flex;align-items:center;justify-content:space-between;gap:10px;')}>
+          <div style={css('font-size:.9rem;font-weight:800;color:#f3f8ff;')}>گزارشِ فعالیتِ ادمین</div>
+          <span style={css('font-size:.7rem;color:rgba(245,250,255,.45);')}>{fa(audit.length)} رویداد اخیر</span>
+        </div>
+
+        <div style={css('display:flex;flex-direction:column;gap:6px;max-height:34vh;overflow-y:auto;')}>
+          {audit.map((e) => (
+            <div
+              key={e.id}
+              style={css('display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 11px;border-radius:11px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);')}
+            >
+              <span style={css('flex:1;min-width:150px;font-size:.8rem;color:#eaf2ff;')} dir="auto">
+                <span style={css('color:rgba(245,250,255,.6);')}>{e.actor || '—'}</span>
+                {' · '}
+                {auditText(e)}
+                {e.target && (
+                  <>
+                    {' → '}
+                    <span style={css('color:#9ecbff;')} dir="auto">
+                      {e.target}
+                    </span>
+                  </>
+                )}
+              </span>
+              <span style={css('flex:none;font-size:.68rem;color:rgba(245,250,255,.42);')}>{fa(timeFa(e.createdAt))}</span>
+            </div>
+          ))}
+          {audit.length === 0 && (
+            <div style={css('text-align:center;padding:16px;color:rgba(245,250,255,.45);font-size:.82rem;')}>
+              هنوز رویدادی ثبت نشده.
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

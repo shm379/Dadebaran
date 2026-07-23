@@ -95,6 +95,7 @@ export type AdminStats = {
 }
 
 export type DayPoint = { day: string; count: number }
+export type RevenuePoint = { day: string; amount: number }
 
 export type AdminAnalytics = {
   days: number
@@ -105,6 +106,17 @@ export type AdminAnalytics = {
   activeToday: number
   activeWeek: number
   totalMessages: number
+  revenueByDay: RevenuePoint[]
+  totalRevenue: number
+}
+
+export type AuditEntry = {
+  id: string
+  actor: string | null
+  action: string
+  target: string | null
+  detail: string | null
+  createdAt: string
 }
 
 export type PlanLimits = { dailyMessages: number | null }

@@ -15,6 +15,14 @@ five RTL Persian AI assistants, user accounts, a model gateway, and subscription
 - **Model gateway** — completions are proxied server-side to **NabuGate** (the
   internal OpenAI-compatible gateway). The model list is fetched from it and
   shown in a picker.
+- **Multi-turn chat** — each request carries the recent conversation, so
+  follow-ups like «کوتاه‌ترش کن» build on the previous answer instead of starting
+  over. History is capped (8 turns / 12k chars) and replays assistant turns as
+  the JSON envelope they were parsed from; attached images aren't re-sent.
+- **Streaming answers** — replies stream in over SSE (`POST /api/complete/stream`)
+  and render as they're written, with a **stop** button that keeps whatever
+  already arrived. Gateways that don't implement `stream: true` are detected and
+  fall back to the buffered call automatically, so streaming can't break chat.
 - **Subscriptions** — free / pro / business plans, per-day usage limits on the
   free plan, an in-app plans dialog, and **Zibal** payment checkout
   (`BILLING_PROVIDER=zibal`) with server-side verification (or `manual` demo mode).

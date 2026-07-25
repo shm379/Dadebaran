@@ -134,6 +134,17 @@ export type Plan = {
 
 export type UsageInfo = { used: number; limit: number | null; remaining: number | null }
 
+export type PaymentRecord = {
+  id: string
+  planCode: string
+  planName: string
+  amount: number // Rial
+  currency: string
+  provider: string
+  ref: string | null
+  createdAt: string
+}
+
 export type ConvSummary = { id: string; botId: BotId; title: string; updatedAt: string; messageCount: number }
 export type Conversation = { id: string; botId: BotId; title: string; messages: Msg[]; updatedAt: string }
 
@@ -144,6 +155,7 @@ export type SubscriptionStatus = {
     status: string
     provider: string
     currentPeriodEnd: string | null
+    cancelAtPeriodEnd: boolean
   } | null
   usage: UsageInfo
 }

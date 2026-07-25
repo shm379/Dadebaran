@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react'
 import { cfg, ORDER, defaultSettings, type BotId } from '../config'
-import { buildPrompt, parse, type MediaKind } from '../prompts'
+import { buildPrompt, parse, partialPrompt, type MediaKind } from '../prompts'
 import { claude, models as modelsApi, conversations as convApi, ApiError, type Message } from '../api'
 import type { ConvSummary, ImageData, ModelOption, Msg, Settings } from '../types'
 
@@ -29,6 +29,7 @@ export type ChatStore = {
   setSetting: (key: string, value: string) => void
   setModel: (id: string) => void
   newChat: () => void
+  stop: () => void
   send: (idea: string, image?: ImageData | null) => void
   runExample: (ex: Example) => void
   refine: (m: Msg, r: Refine) => void
@@ -61,6 +62,43 @@ function deriveTitle(messages: Msg[]): string {
 const SETTINGS_KEY = 'mrc-settings-v1'
 const MODEL_KEY = 'mrc-model'
 
+// How much of the conversation travels with each request. Capped on both count
+// and size so a long thread can't grow the payload (and the bill) without bound.
+const HISTORY_MAX_MESSAGES = 8
+const HISTORY_MAX_CHARS = 12000
+
+/**
+ * Turn the on-screen thread into prior turns for the model.
+ *
+ * Assistant turns are replayed as the JSON envelope they were parsed from, so
+ * the model sees its own output contract and keeps answering in that shape.
+ * Attached images are not replayed — re-uploading base64 on every follow-up
+ * would dwarf the rest of the payload — so an image-only turn becomes a marker.
+ */
+function historyMessages(msgs: Msg[]): Message[] {
+  const turns: Message[] = []
+  for (const m of msgs) {
+    if (m.role === 'user' && m.kind === 'text') {
+      const text = (m.text || '').trim()
+      if (text || m.image) turns.push({ role: 'user', content: text || '[تصویری فرستادم]' })
+    } else if (m.role === 'assistant' && m.kind === 'prompt') {
+      turns.push({
+        role: 'assistant',
+        content: JSON.stringify({ title: m.title || '', prompt: m.prompt || '', tips: m.tips || [] }),
+      })
+    }
+  }
+  const kept = turns.slice(-HISTORY_MAX_MESSAGES)
+  let chars = kept.reduce((n, t) => n + String(t.content).length, 0)
+  while (kept.length && chars > HISTORY_MAX_CHARS) {
+    chars -= String(kept[0].content).length
+    kept.shift()
+  }
+  // The exchange has to open on a user turn.
+  while (kept.length && kept[0].role === 'assistant') kept.shift()
+  return kept
+}
+
 export function ChatProvider({ children }: { children: ReactNode }) {
   const [activeBot, setActiveBot] = useState<BotId>('prompt')
   const [settings, setSettings] = useState<Record<BotId, Settings>>(initialSettings)
@@ -74,6 +112,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const [loaded, setLoaded] = useState(false)
 
   const uid = useRef(1)
+  const abortRef = useRef<AbortController | null>(null)
   const messagesRef = useRef(messages)
   const settingsRef = useRef(settings)
   const modelRef = useRef(model)
@@ -211,24 +250,58 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         settingsOverride?: Settings
         modifier?: string
         langOverride?: 'en' | 'fa'
+        history?: Msg[]
       } = {},
     ) => {
       const s: Settings = { ...(opts.settingsOverride || settingsRef.current[botId]) }
       if (opts.langOverride) s.lang = opts.langOverride
       const loadingId = pushMsg({ role: 'assistant', kind: 'loading', loadingText: cfg[botId].loadingText })
       setBusy(true)
+      const ac = new AbortController()
+      abortRef.current = ac
+      // Repaint on a timer rather than per token — a long answer is thousands
+      // of deltas and each one would otherwise re-render the whole thread.
+      let partial = ''
+      let flushTimer: ReturnType<typeof setTimeout> | null = null
+      const paint = () => {
+        flushTimer = null
+        replaceMsg(loadingId, {
+          role: 'assistant',
+          kind: 'loading',
+          loadingText: cfg[botId].loadingText,
+          text: partialPrompt(partial),
+        })
+      }
       try {
         const mediaKind: MediaKind = opts.image ? (opts.image.isVideo ? 'video' : 'image') : null
         const content = buildPrompt(botId, idea, s, opts.modifier, mediaKind)
-        let raw: string
-        if (opts.image) {
-          const blocks = [
-            { type: 'image' as const, source: { type: 'base64' as const, media_type: opts.image.mediaType, data: opts.image.base64 } },
-            { type: 'text' as const, text: content },
-          ]
-          raw = await claude.complete({ messages: [{ role: 'user', content: blocks }], model: modelRef.current || undefined })
-        } else {
-          raw = await claude.complete({ messages: [{ role: 'user', content }], model: modelRef.current || undefined })
+        const message: Message = opts.image
+          ? {
+              role: 'user',
+              content: [
+                { type: 'image' as const, source: { type: 'base64' as const, media_type: opts.image.mediaType, data: opts.image.base64 } },
+                { type: 'text' as const, text: content },
+              ],
+            }
+          : { role: 'user', content }
+        // Earlier turns give the model the context a follow-up depends on
+        // ("کوتاه‌ترش کن"); the newest turn still carries the full instruction
+        // scaffold so the answer keeps its expected shape.
+        const raw = await claude.stream({
+          messages: [...historyMessages(opts.history || []), message],
+          model: modelRef.current || undefined,
+          signal: ac.signal,
+          onDelta: (chunk) => {
+            partial += chunk
+            if (flushTimer == null) flushTimer = setTimeout(paint, 60)
+          },
+        })
+        if (flushTimer != null) clearTimeout(flushTimer)
+        // Stopped before anything readable arrived — drop the placeholder
+        // rather than leaving a card holding a JSON fragment.
+        if (ac.signal.aborted && !partialPrompt(raw).trim()) {
+          setMessages((prev) => prev.filter((m) => m.id !== loadingId))
+          return
         }
         const data = parse(raw)
         replaceMsg(loadingId, {
@@ -243,6 +316,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           sourceIdea: idea,
         })
       } catch (err) {
+        if (flushTimer != null) clearTimeout(flushTimer)
         const code = err instanceof ApiError ? err.code : 'server'
         let msg: string
         if (code === 'no-api') msg = 'برای پاسخِ زنده باید سرورِ مدل (نبوگیت) متصل باشد؛ این‌جا فعلاً فقط پیش‌نمایشِ ظاهر است.'
@@ -253,6 +327,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         else msg = 'یه مشکلی پیش اومد. چند لحظه صبر کن و دوباره بفرست.'
         replaceMsg(loadingId, { role: 'assistant', kind: 'error', text: msg })
       } finally {
+        if (abortRef.current === ac) abortRef.current = null
         setBusy(false)
       }
     },
@@ -278,7 +353,15 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   const setModel = useCallback((id: string) => setModelState(id), [])
 
+  // Stop generating. Whatever already streamed in is kept.
+  const stop = useCallback(() => {
+    abortRef.current?.abort()
+    abortRef.current = null
+  }, [])
+
   const newChat = useCallback(() => {
+    abortRef.current?.abort()
+    abortRef.current = null
     setConvId(null)
     convIdRef.current = null
     setMessages([])
@@ -290,8 +373,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       const text = (idea || '').trim()
       if ((!text && !image) || busyRef.current) return
       const bot = activeBotRef.current
+      // Snapshot before pushing, so this turn isn't replayed as its own history.
+      const history = messagesRef.current
       pushMsg({ role: 'user', kind: 'text', text, image: image ? image.dataURL : null })
-      generate(bot, text, { image })
+      generate(bot, text, { image, history })
     },
     [pushMsg, generate],
   )
@@ -302,8 +387,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       const bot = activeBotRef.current
       const s = { ...settingsRef.current[bot], ...(ex.patch || {}) }
       if (ex.patch) setSettings((prev) => ({ ...prev, [bot]: s }))
+      const history = messagesRef.current
       pushMsg({ role: 'user', kind: 'text', text: ex.text })
-      generate(bot, ex.text, { settingsOverride: s })
+      generate(bot, ex.text, { settingsOverride: s, history })
     },
     [pushMsg, generate],
   )
@@ -312,8 +398,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     (m: Msg, r: Refine) => {
       if (busyRef.current) return
       const bot = activeBotRef.current
+      const history = messagesRef.current
       pushMsg({ role: 'user', kind: 'text', text: r.label })
-      generate(bot, m.sourceIdea || m.title || '', { modifier: r.mod, langOverride: r.lang })
+      generate(bot, m.sourceIdea || m.title || '', { modifier: r.mod, langOverride: r.lang, history })
     },
     [pushMsg, generate],
   )
@@ -371,6 +458,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     setSetting,
     setModel,
     newChat,
+    stop,
     send,
     runExample,
     refine,

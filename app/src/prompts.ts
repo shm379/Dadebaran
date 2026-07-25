@@ -121,9 +121,48 @@ export function buildPrompt(
 
 export type Parsed = { title: string; prompt: string; tips: string[] }
 
+// Read one string field out of a JSON envelope that may still be incomplete,
+// stopping at the end of the text received so far.
+function partialField(s: string, key: string): string {
+  const at = s.search(new RegExp('"' + key + '"\\s*:'))
+  if (at < 0) return ''
+  const open = s.indexOf('"', s.indexOf(':', at))
+  if (open < 0) return ''
+  let out = ''
+  for (let i = open + 1; i < s.length; i++) {
+    const ch = s[i]
+    if (ch === '\\') {
+      const n = s[i + 1]
+      if (n === undefined) break
+      out += n === 'n' ? '\n' : n === 't' ? '\t' : n === 'r' ? '' : n
+      i++
+      continue
+    }
+    if (ch === '"') break
+    out += ch
+  }
+  return out
+}
+
+function stripFence(raw: string): string {
+  return (raw || '').replace(/^```[a-z]*\s*/i, '').replace(/\s*```$/, '')
+}
+
+/**
+ * Best-effort read of the `prompt` field out of a partially-received answer, so
+ * a streaming response shows the prompt being written rather than raw JSON.
+ * Returns '' while the field hasn't started arriving yet. Plain-text answers
+ * (no JSON envelope) are shown verbatim.
+ */
+export function partialPrompt(raw: string): string {
+  const s = stripFence(raw).trimStart()
+  if (!s) return ''
+  if (!s.startsWith('{')) return s
+  return partialField(s, 'prompt')
+}
+
 export function parse(raw: string): Parsed {
-  let s = (raw || '').trim()
-  s = s.replace(/^```[a-z]*\s*/i, '').replace(/\s*```$/, '').trim()
+  let s = stripFence(raw).trim()
   const a = s.indexOf('{'),
     b = s.lastIndexOf('}')
   if (a >= 0 && b > a) s = s.slice(a, b + 1)
@@ -135,6 +174,13 @@ export function parse(raw: string): Parsed {
       tips: Array.isArray(o.tips) ? o.tips.slice(0, 3) : [],
     }
   } catch {
-    return { title: 'خروجیِ پیشنهادی', prompt: (raw || '').trim(), tips: [] }
+    // Truncated envelope — stopped early, or the answer hit the token cap.
+    // Recover the text that was actually written instead of showing raw JSON.
+    const salvaged = partialPrompt(raw).trim()
+    return {
+      title: partialField(s, 'title') || 'خروجیِ پیشنهادی',
+      prompt: salvaged || (raw || '').trim(),
+      tips: [],
+    }
   }
 }

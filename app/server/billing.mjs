@@ -228,6 +228,25 @@ export async function recordPayment({ userId, planCode, amount, provider = 'ziba
   }
 }
 
+// The signed-in user's own payment history (most recent first).
+export async function listPayments(userId) {
+  const { rows } = await pool.query(
+    `SELECT id, plan_code, amount, currency, provider, ref, created_at
+       FROM payments WHERE user_id = $1 ORDER BY id DESC LIMIT 50`,
+    [userId],
+  )
+  return rows.map((r) => ({
+    id: String(r.id),
+    planCode: r.plan_code,
+    planName: getPlan(r.plan_code).name,
+    amount: Number(r.amount), // Rial
+    currency: r.currency,
+    provider: r.provider,
+    ref: r.ref,
+    createdAt: r.created_at,
+  }))
+}
+
 export async function verifyAndActivateZibal(trackId) {
   if (!trackId) return { ok: false, reason: 'no_track' }
   const { rows } = await pool.query(
@@ -290,5 +309,22 @@ export async function cancel(userId) {
       [userId],
     )
   }
+  return { status: 200, body: { ...(await getStatus(userId)) } }
+}
+
+/**
+ * Undo a pending cancellation — auto-renewal resumes. Only meaningful while the
+ * paid period is still running; once it lapses there is no active row to resume
+ * and the user has to subscribe again.
+ */
+export async function resume(userId) {
+  const sub = await getActiveSubscription(userId)
+  if (!sub) {
+    return { status: 400, body: { error: 'no_subscription', message: 'اشتراکِ فعالی برای ادامه دادن نیست.' } }
+  }
+  await pool.query(
+    `UPDATE subscriptions SET cancel_at_period_end = false, updated_at = now() WHERE id = $1`,
+    [sub.id],
+  )
   return { status: 200, body: { ...(await getStatus(userId)) } }
 }

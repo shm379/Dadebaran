@@ -25,10 +25,24 @@ export function MessageItem({ m, isLast }: { m: Msg; isLast: boolean }) {
   }
 
   if (m.kind === 'loading') {
+    // While streaming, show the answer as it's written; the dots stay as the
+    // "still going" signal.
+    const streamed = m.text && m.text.trim()
     return (
-      <div style={css('display:flex;align-items:center;gap:11px;color:rgba(245,250,255,.7);font-size:.9rem;')}>
-        <DotsLoader />
-        {m.loadingText}
+      <div style={css('display:flex;flex-direction:column;gap:9px;')}>
+        <div style={css('display:flex;align-items:center;gap:11px;color:rgba(245,250,255,.7);font-size:.9rem;')}>
+          <DotsLoader />
+          {m.loadingText}
+        </div>
+        {streamed && (
+          <div
+            dir="auto"
+            style={css('white-space:pre-wrap;padding:12px 15px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);color:rgba(240,247,255,.86);font-size:.92rem;line-height:1.9;')}
+          >
+            {m.text}
+            <span style={css('display:inline-block;width:7px;height:1.05em;margin-right:2px;vertical-align:-2px;border-radius:1px;background:rgba(140,190,255,.75);')} />
+          </div>
+        )}
       </div>
     )
   }

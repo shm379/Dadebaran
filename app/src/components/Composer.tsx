@@ -19,7 +19,7 @@ function micBtnStyle(active: boolean) {
 }
 
 export function Composer() {
-  const { activeBot, settings, busy, send, resetToken } = useChat()
+  const { activeBot, settings, busy, send, stop, resetToken } = useChat()
   const c = cfg[activeBot]
   const botSettings = settings[activeBot]
 
@@ -144,17 +144,32 @@ export function Composer() {
               placeholder={c.placeholder}
               style={css('flex:1;min-width:0;resize:none;max-height:160px;background:transparent;border:0;outline:none;color:#f7fbff;font-family:inherit;font-size:1rem;line-height:1.7;padding:8px 6px;')}
             />
-            <HoverButton
-              onClick={doSend}
-              disabled={sendDisabled}
-              aria-label="ارسال"
-              styleStr="flex:none;width:44px;height:44px;display:grid;place-items:center;border-radius:14px;cursor:pointer;color:#fff;border:1px solid #167afe;background:linear-gradient(180deg,#2488ff,#1460ca);box-shadow:inset 0 0 40px rgba(21,21,29,.24);transition:all .2s ease;"
-              hoverStr="filter:brightness(1.08);transform:translateY(-1px);"
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                <path d="M12 19V5M12 5l-6 6M12 5l6 6" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </HoverButton>
+            {busy ? (
+              // While an answer is streaming, the same slot stops it.
+              <HoverButton
+                onClick={stop}
+                aria-label="توقفِ پاسخ"
+                title="توقفِ پاسخ"
+                styleStr="flex:none;width:44px;height:44px;display:grid;place-items:center;border-radius:14px;cursor:pointer;color:#ffcaca;border:1px solid rgba(255,80,80,.5);background:rgba(255,80,80,.16);transition:all .2s ease;"
+                hoverStr="background:rgba(255,80,80,.3);transform:translateY(-1px);"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <rect x="6" y="6" width="12" height="12" rx="2.5" fill="currentColor" />
+                </svg>
+              </HoverButton>
+            ) : (
+              <HoverButton
+                onClick={doSend}
+                disabled={sendDisabled}
+                aria-label="ارسال"
+                styleStr="flex:none;width:44px;height:44px;display:grid;place-items:center;border-radius:14px;cursor:pointer;color:#fff;border:1px solid #167afe;background:linear-gradient(180deg,#2488ff,#1460ca);box-shadow:inset 0 0 40px rgba(21,21,29,.24);transition:all .2s ease;"
+                hoverStr="filter:brightness(1.08);transform:translateY(-1px);"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 19V5M12 5l-6 6M12 5l6 6" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </HoverButton>
+            )}
           </div>
         </div>
         <div style={css('margin-top:9px;text-align:center;font-size:.74rem;color:rgba(245,250,255,.42);')}>

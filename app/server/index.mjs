@@ -9,9 +9,9 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { initDb, ping } from './db.mjs'
 import { register, login, logout, me, requireAuth, requireAdmin, updateProfile, changePassword } from './auth.mjs'
-import { handleComplete } from './complete.mjs'
+import { handleComplete, streamComplete } from './complete.mjs'
 import { listModels } from './models.mjs'
-import { currentPlanCode, listPlans, getStatus, checkout, cancel, reconcile, consumeQuota, refundQuota, verifyAndActivateZibal } from './billing.mjs'
+import { currentPlanCode, listPlans, getStatus, checkout, cancel, resume, reconcile, consumeQuota, refundQuota, verifyAndActivateZibal, listPayments } from './billing.mjs'
 import { modelAllowedForPlan, requiredPlanForModel } from './plans.mjs'
 import { listKeys, createKey, revokeKey } from './apikeys.mjs'
 import { adminStats, adminUsers, adminUpdateUser, adminDeleteUser, adminAuditLog } from './admin.mjs'
@@ -146,6 +146,14 @@ app.post('/api/subscription/checkout', requireAuth, async (req, res) => {
   }
 })
 
+app.get('/api/billing/payments', requireAuth, async (req, res) => {
+  try {
+    res.json({ payments: await listPayments(req.user.id) })
+  } catch (err) {
+    fail(res, 503, err)
+  }
+})
+
 app.post('/api/subscription/reconcile', requireAuth, async (req, res) => {
   try {
     const { status, body } = await reconcile(req.user.id)
@@ -158,6 +166,15 @@ app.post('/api/subscription/reconcile', requireAuth, async (req, res) => {
 app.post('/api/subscription/cancel', requireAuth, async (req, res) => {
   try {
     const { status, body } = await cancel(req.user.id)
+    res.status(status).json(body)
+  } catch (err) {
+    fail(res, 503, err)
+  }
+})
+
+app.post('/api/subscription/resume', requireAuth, async (req, res) => {
+  try {
+    const { status, body } = await resume(req.user.id)
     res.status(status).json(body)
   } catch (err) {
     fail(res, 503, err)
@@ -217,6 +234,82 @@ app.post('/api/complete', requireAuth, async (req, res) => {
   } catch (err) {
     if (reserved) await refundQuota(req.user.id).catch(() => {})
     fail(res, 500, err)
+  }
+})
+
+// ---- Streaming completion (SSE) ----
+// Same gating as /api/complete, but the answer arrives incrementally. Gating
+// runs BEFORE any SSE header so quota/plan rejections stay real HTTP statuses
+// the client can branch on; once the stream is open, problems are sent as
+// `event: error` frames instead.
+app.post('/api/complete/stream', requireAuth, async (req, res) => {
+  let reserved = false
+  let sent = 0 // characters already delivered — never refund those
+  try {
+    const requestedModel = req.body && typeof req.body.model === 'string' ? req.body.model : ''
+    if (requestedModel) {
+      const planCode = await currentPlanCode(req.user.id)
+      if (!modelAllowedForPlan(planCode, requestedModel)) {
+        return res.status(403).json({
+          error: 'model_locked',
+          message: 'این مدل در پلنِ فعلیت در دسترس نیست. برای دسترسی، اشتراکت رو ارتقا بده.',
+          requiredPlan: requiredPlanForModel(requestedModel),
+        })
+      }
+    }
+    const quota = await consumeQuota(req.user.id)
+    if (!quota.allowed) {
+      return res.status(402).json({
+        error: 'quota_exceeded',
+        message: 'سقفِ پیام‌های امروزِ پلنِ رایگان پر شده. برای ادامه، اشتراک تهیه کن.',
+        usage: quota,
+      })
+    }
+    reserved = true
+
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no', // don't let a proxy buffer the stream
+    })
+    res.flushHeaders?.()
+
+    // The browser going away (navigation, stop button) aborts the upstream call.
+    const ac = new AbortController()
+    res.on('close', () => ac.abort())
+
+    const send = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+    const result = await streamComplete(
+      req.body,
+      (chunk) => {
+        sent += chunk.length
+        send('delta', { text: chunk })
+      },
+      ac.signal,
+    )
+
+    if (result.status === 200) {
+      send('done', { ok: true })
+      recordModelUsage(requestedModel || defaultModel())
+    } else if (result.aborted || ac.signal.aborted) {
+      // Stopped by the user. Text already delivered stays billed (and counted),
+      // but a stop before any output costs nothing.
+      if (sent) recordModelUsage(requestedModel || defaultModel())
+      else await refundQuota(req.user.id).catch(() => {})
+    } else {
+      if (!sent) await refundQuota(req.user.id).catch(() => {})
+      send('error', { error: result.error === 'no-api' ? 'no-api' : 'server' })
+    }
+    res.end()
+  } catch (err) {
+    if (reserved && !sent) await refundQuota(req.user.id).catch(() => {})
+    if (res.headersSent) {
+      res.write(`event: error\ndata: ${JSON.stringify({ error: 'server' })}\n\n`)
+      res.end()
+    } else {
+      fail(res, 500, err)
+    }
   }
 })
 

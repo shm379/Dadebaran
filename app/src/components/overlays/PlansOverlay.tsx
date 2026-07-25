@@ -4,16 +4,32 @@ import { HoverButton } from '../ui/HoverButton'
 import { billing, ApiError } from '../../api'
 import { useToast } from '../../state/ToastProvider'
 import { useBilling } from '../../state/BillingProvider'
-import type { Plan, SubscriptionStatus } from '../../types'
+import type { PaymentRecord, Plan, SubscriptionStatus } from '../../types'
+
+const FA = '۰۱۲۳۴۵۶۷۸۹'
+const fa = (s: string | number) => String(s).replace(/[0-9]/g, (d) => FA[+d])
+// Rial → Toman (÷10) with Persian thousands separators.
+const grp = (n: number) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '٬')
+const toman = (rial: number) => fa(grp(rial / 10))
+const dateFa = (iso: string) => {
+  try {
+    return new Intl.DateTimeFormat('fa-IR', { dateStyle: 'medium' }).format(new Date(iso))
+  } catch {
+    return iso
+  }
+}
 
 export function PlansOverlay({ onClose }: { onClose: () => void }) {
   const { showToast } = useToast()
   const { refresh } = useBilling()
   const [plans, setPlans] = useState<Plan[]>([])
   const [status, setStatus] = useState<SubscriptionStatus | null>(null)
+  const [payments, setPayments] = useState<PaymentRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [pending, setPending] = useState<string | null>(null)
   const [reconciling, setReconciling] = useState(false)
+
+  const loadPayments = () => billing.payments().then(setPayments).catch(() => {})
 
   useEffect(() => {
     let alive = true
@@ -25,6 +41,7 @@ export function PlansOverlay({ onClose }: { onClose: () => void }) {
       })
       .catch(() => {})
       .finally(() => alive && setLoading(false))
+    loadPayments()
     return () => {
       alive = false
     }
@@ -60,6 +77,7 @@ export function PlansOverlay({ onClose }: { onClose: () => void }) {
       const r = await billing.reconcile()
       setStatus(r)
       refresh()
+      if (r.reconciled) loadPayments()
       showToast(r.reconciled ? 'پرداختت پیدا و فعال شد ✓' : 'پرداختِ در انتظاری پیدا نشد.')
     } catch {
       showToast('بررسی نشد؛ دوباره امتحان کن.')
@@ -160,6 +178,37 @@ export function PlansOverlay({ onClose }: { onClose: () => void }) {
                 </div>
               )
             })}
+          </div>
+        )}
+
+        {payments.length > 0 && (
+          <div style={css('display:flex;flex-direction:column;gap:9px;')}>
+            <div style={css('height:1px;background:rgba(255,255,255,.08);')} />
+            <div style={css('font-size:.86rem;font-weight:800;color:#f3f8ff;')}>تاریخچهٔ پرداخت‌ها</div>
+            <div style={css('display:flex;flex-direction:column;gap:7px;max-height:30vh;overflow-y:auto;')}>
+              {payments.map((p) => (
+                <div
+                  key={p.id}
+                  style={css('display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 13px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.1);')}
+                >
+                  <div style={css('flex:1;min-width:150px;display:flex;flex-direction:column;gap:2px;')}>
+                    <span style={css('font-size:.86rem;color:#eaf2ff;font-weight:600;')}>اشتراکِ {p.planName}</span>
+                    <span style={css('font-size:.7rem;color:rgba(245,250,255,.5);')}>
+                      {fa(dateFa(p.createdAt))}
+                      {p.ref && <span style={css('color:rgba(245,250,255,.38);')}>{' · کدِ پیگیری: ' + fa(p.ref)}</span>}
+                    </span>
+                  </div>
+                  <div style={css('display:flex;align-items:center;gap:8px;')}>
+                    <span style={css('font-size:.9rem;font-weight:800;color:#7ee0a8;white-space:nowrap;')}>
+                      {toman(p.amount)} <span style={css('font-size:.7rem;font-weight:600;color:rgba(126,224,168,.7);')}>تومان</span>
+                    </span>
+                    <span style={css('font-size:.66rem;font-weight:700;color:#7ee0a8;background:rgba(126,224,168,.12);border:1px solid rgba(126,224,168,.3);border-radius:99px;padding:2px 8px;')}>
+                      موفق
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

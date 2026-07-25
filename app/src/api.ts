@@ -17,6 +17,7 @@ import type {
   Conversation,
   ConvSummary,
   ModelOption,
+  PaymentRecord,
   Plan,
   SubscriptionStatus,
   User,
@@ -155,6 +156,9 @@ export const billing = {
     return (await request('/api/subscription/reconcile', postInit({}))) as unknown as SubscriptionStatus & {
       reconciled: boolean
     }
+  },
+  async payments(): Promise<PaymentRecord[]> {
+    return ((await request('/api/billing/payments')).payments as PaymentRecord[]) || []
   },
 }
 

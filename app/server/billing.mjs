@@ -228,6 +228,25 @@ export async function recordPayment({ userId, planCode, amount, provider = 'ziba
   }
 }
 
+// The signed-in user's own payment history (most recent first).
+export async function listPayments(userId) {
+  const { rows } = await pool.query(
+    `SELECT id, plan_code, amount, currency, provider, ref, created_at
+       FROM payments WHERE user_id = $1 ORDER BY id DESC LIMIT 50`,
+    [userId],
+  )
+  return rows.map((r) => ({
+    id: String(r.id),
+    planCode: r.plan_code,
+    planName: getPlan(r.plan_code).name,
+    amount: Number(r.amount), // Rial
+    currency: r.currency,
+    provider: r.provider,
+    ref: r.ref,
+    createdAt: r.created_at,
+  }))
+}
+
 export async function verifyAndActivateZibal(trackId) {
   if (!trackId) return { ok: false, reason: 'no_track' }
   const { rows } = await pool.query(

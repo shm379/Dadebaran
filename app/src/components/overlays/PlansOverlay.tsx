@@ -28,6 +28,8 @@ export function PlansOverlay({ onClose }: { onClose: () => void }) {
   const [loading, setLoading] = useState(true)
   const [pending, setPending] = useState<string | null>(null)
   const [reconciling, setReconciling] = useState(false)
+  const [confirmCancel, setConfirmCancel] = useState(false)
+  const [cancelBusy, setCancelBusy] = useState(false)
 
   const loadPayments = () => billing.payments().then(setPayments).catch(() => {})
 
@@ -86,7 +88,43 @@ export function PlansOverlay({ onClose }: { onClose: () => void }) {
     }
   }
 
+  // Stop auto-renewal. Access continues until the paid period ends, so the
+  // confirmation says so rather than implying instant loss.
+  async function cancelSubscription() {
+    if (cancelBusy) return
+    setCancelBusy(true)
+    try {
+      const next = await billing.cancel()
+      setStatus(next)
+      refresh()
+      setConfirmCancel(false)
+      showToast(next.subscription?.cancelAtPeriodEnd ? 'تمدیدِ خودکار لغو شد' : 'اشتراک لغو شد')
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : 'لغو نشد؛ دوباره امتحان کن.')
+    } finally {
+      setCancelBusy(false)
+    }
+  }
+
+  async function resumeSubscription() {
+    if (cancelBusy) return
+    setCancelBusy(true)
+    try {
+      const next = await billing.resume()
+      setStatus(next)
+      refresh()
+      showToast('تمدیدِ خودکار دوباره فعال شد ✓')
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : 'انجام نشد؛ دوباره امتحان کن.')
+    } finally {
+      setCancelBusy(false)
+    }
+  }
+
   const usage = status?.usage
+  const sub = status?.subscription
+  const isPaid = currentCode !== 'free' && !!sub
+  const endsOn = sub?.currentPeriodEnd ? fa(dateFa(sub.currentPeriodEnd)) : null
 
   return (
     <div style={css('position:fixed;inset:0;z-index:60;display:flex;align-items:flex-start;justify-content:center;padding:5vh 16px;overflow-y:auto;background:radial-gradient(circle at 50% 0%,rgba(255,196,64,.14),transparent 55%),rgba(8,10,20,.86);backdrop-filter:blur(16px);')}>
@@ -124,6 +162,69 @@ export function PlansOverlay({ onClose }: { onClose: () => void }) {
               : `مصرفِ امروز: ${usage.used} از ${usage.limit}`}
           </div>
         )}
+
+        {isPaid &&
+          (sub.cancelAtPeriodEnd ? (
+            // Cancellation is pending — access continues until the period ends.
+            <div style={css('display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:.82rem;background:rgba(255,196,64,.09);border:1px solid rgba(255,196,64,.3);border-radius:12px;padding:11px 14px;')}>
+              <span style={css('flex:1;min-width:200px;color:rgba(255,226,160,.92);line-height:1.7;')}>
+                تمدیدِ خودکار لغو شده
+                {endsOn && <> — دسترسیت تا <strong style={css('color:#ffd884;')}>{endsOn}</strong> فعاله.</>}
+              </span>
+              <HoverButton
+                onClick={resumeSubscription}
+                disabled={cancelBusy}
+                styleStr={
+                  'flex:none;padding:.45rem .85rem;border-radius:10px;font-size:.8rem;font-weight:700;cursor:pointer;color:#ffd884;background:rgba(255,196,64,.14);border:1px solid rgba(255,196,64,.45);' +
+                  (cancelBusy ? 'opacity:.6;' : '')
+                }
+                hoverStr="background:rgba(255,196,64,.26);"
+              >
+                {cancelBusy ? 'کمی صبر کن…' : 'ادامه دادنِ اشتراک'}
+              </HoverButton>
+            </div>
+          ) : confirmCancel ? (
+            <div style={css('display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:.82rem;background:rgba(255,80,80,.08);border:1px solid rgba(255,80,80,.3);border-radius:12px;padding:11px 14px;')}>
+              <span style={css('flex:1;min-width:200px;color:rgba(255,196,196,.92);line-height:1.7;')}>
+                مطمئنی؟ تمدیدِ خودکار متوقف می‌شه
+                {endsOn ? (
+                  <> ولی تا <strong style={css('color:#ffbcbc;')}>{endsOn}</strong> دسترسیت باقی می‌مونه.</>
+                ) : (
+                  <> و پلنت به رایگان برمی‌گرده.</>
+                )}
+              </span>
+              <HoverButton
+                onClick={cancelSubscription}
+                disabled={cancelBusy}
+                styleStr={
+                  'flex:none;padding:.45rem .85rem;border-radius:10px;font-size:.8rem;font-weight:700;cursor:pointer;color:#ffcaca;background:rgba(255,80,80,.16);border:1px solid rgba(255,80,80,.45);' +
+                  (cancelBusy ? 'opacity:.6;' : '')
+                }
+                hoverStr="background:rgba(255,80,80,.3);"
+              >
+                {cancelBusy ? 'در حال لغو…' : 'بله، لغو کن'}
+              </HoverButton>
+              <button
+                onClick={() => setConfirmCancel(false)}
+                disabled={cancelBusy}
+                style={css('flex:none;background:none;border:0;cursor:pointer;color:rgba(245,250,255,.6);font-family:inherit;font-size:.8rem;font-weight:700;')}
+              >
+                بی‌خیال
+              </button>
+            </div>
+          ) : (
+            <div style={css('display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:.8rem;color:rgba(245,250,255,.55);padding:0 3px;')}>
+              <span style={css('flex:1;min-width:180px;')}>
+                {endsOn ? <>تمدیدِ خودکار در {endsOn}</> : <>اشتراکِ فعال</>}
+              </span>
+              <button
+                onClick={() => setConfirmCancel(true)}
+                style={css('flex:none;background:none;border:0;cursor:pointer;color:rgba(255,150,150,.85);font-family:inherit;font-size:.8rem;font-weight:700;')}
+              >
+                لغوِ اشتراک
+              </button>
+            </div>
+          ))}
 
         {loading ? (
           <div style={css('text-align:center;padding:30px;color:rgba(245,250,255,.5);')}>در حال بارگذاری…</div>

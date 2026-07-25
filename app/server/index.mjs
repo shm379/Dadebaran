@@ -11,7 +11,7 @@ import { initDb, ping } from './db.mjs'
 import { register, login, logout, me, requireAuth, requireAdmin, updateProfile, changePassword } from './auth.mjs'
 import { handleComplete } from './complete.mjs'
 import { listModels } from './models.mjs'
-import { currentPlanCode, listPlans, getStatus, checkout, cancel, reconcile, consumeQuota, refundQuota, verifyAndActivateZibal, listPayments } from './billing.mjs'
+import { currentPlanCode, listPlans, getStatus, checkout, cancel, resume, reconcile, consumeQuota, refundQuota, verifyAndActivateZibal, listPayments } from './billing.mjs'
 import { modelAllowedForPlan, requiredPlanForModel } from './plans.mjs'
 import { listKeys, createKey, revokeKey } from './apikeys.mjs'
 import { adminStats, adminUsers, adminUpdateUser, adminDeleteUser, adminAuditLog } from './admin.mjs'
@@ -166,6 +166,15 @@ app.post('/api/subscription/reconcile', requireAuth, async (req, res) => {
 app.post('/api/subscription/cancel', requireAuth, async (req, res) => {
   try {
     const { status, body } = await cancel(req.user.id)
+    res.status(status).json(body)
+  } catch (err) {
+    fail(res, 503, err)
+  }
+})
+
+app.post('/api/subscription/resume', requireAuth, async (req, res) => {
+  try {
+    const { status, body } = await resume(req.user.id)
     res.status(status).json(body)
   } catch (err) {
     fail(res, 503, err)

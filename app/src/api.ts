@@ -152,6 +152,9 @@ export const billing = {
   async cancel(): Promise<SubscriptionStatus> {
     return (await request('/api/subscription/cancel', postInit({}))) as unknown as SubscriptionStatus
   },
+  async resume(): Promise<SubscriptionStatus> {
+    return (await request('/api/subscription/resume', postInit({}))) as unknown as SubscriptionStatus
+  },
   async reconcile(): Promise<SubscriptionStatus & { reconciled: boolean }> {
     return (await request('/api/subscription/reconcile', postInit({}))) as unknown as SubscriptionStatus & {
       reconciled: boolean

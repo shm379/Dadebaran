@@ -155,6 +155,7 @@ export type SubscriptionStatus = {
     status: string
     provider: string
     currentPeriodEnd: string | null
+    cancelAtPeriodEnd: boolean
   } | null
   usage: UsageInfo
 }

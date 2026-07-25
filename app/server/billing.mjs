@@ -311,3 +311,20 @@ export async function cancel(userId) {
   }
   return { status: 200, body: { ...(await getStatus(userId)) } }
 }
+
+/**
+ * Undo a pending cancellation — auto-renewal resumes. Only meaningful while the
+ * paid period is still running; once it lapses there is no active row to resume
+ * and the user has to subscribe again.
+ */
+export async function resume(userId) {
+  const sub = await getActiveSubscription(userId)
+  if (!sub) {
+    return { status: 400, body: { error: 'no_subscription', message: 'اشتراکِ فعالی برای ادامه دادن نیست.' } }
+  }
+  await pool.query(
+    `UPDATE subscriptions SET cancel_at_period_end = false, updated_at = now() WHERE id = $1`,
+    [sub.id],
+  )
+  return { status: 200, body: { ...(await getStatus(userId)) } }
+}

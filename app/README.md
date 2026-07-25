@@ -15,6 +15,10 @@ five RTL Persian AI assistants, user accounts, a model gateway, and subscription
 - **Model gateway** — completions are proxied server-side to **NabuGate** (the
   internal OpenAI-compatible gateway). The model list is fetched from it and
   shown in a picker.
+- **Streaming answers** — replies stream in over SSE (`POST /api/complete/stream`)
+  and render as they're written, with a **stop** button that keeps whatever
+  already arrived. Gateways that don't implement `stream: true` are detected and
+  fall back to the buffered call automatically, so streaming can't break chat.
 - **Subscriptions** — free / pro / business plans, per-day usage limits on the
   free plan, an in-app plans dialog, and **Zibal** payment checkout
   (`BILLING_PROVIDER=zibal`) with server-side verification (or `manual` demo mode).

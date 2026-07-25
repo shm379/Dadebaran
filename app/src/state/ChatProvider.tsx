@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react'
 import { cfg, ORDER, defaultSettings, type BotId } from '../config'
-import { buildPrompt, parse, type MediaKind } from '../prompts'
+import { buildPrompt, parse, partialPrompt, type MediaKind } from '../prompts'
 import { claude, models as modelsApi, conversations as convApi, ApiError, type Message } from '../api'
 import type { ConvSummary, ImageData, ModelOption, Msg, Settings } from '../types'
 
@@ -29,6 +29,7 @@ export type ChatStore = {
   setSetting: (key: string, value: string) => void
   setModel: (id: string) => void
   newChat: () => void
+  stop: () => void
   send: (idea: string, image?: ImageData | null) => void
   runExample: (ex: Example) => void
   refine: (m: Msg, r: Refine) => void
@@ -74,6 +75,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const [loaded, setLoaded] = useState(false)
 
   const uid = useRef(1)
+  const abortRef = useRef<AbortController | null>(null)
   const messagesRef = useRef(messages)
   const settingsRef = useRef(settings)
   const modelRef = useRef(model)
@@ -217,18 +219,48 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       if (opts.langOverride) s.lang = opts.langOverride
       const loadingId = pushMsg({ role: 'assistant', kind: 'loading', loadingText: cfg[botId].loadingText })
       setBusy(true)
+      const ac = new AbortController()
+      abortRef.current = ac
+      // Repaint on a timer rather than per token — a long answer is thousands
+      // of deltas and each one would otherwise re-render the whole thread.
+      let partial = ''
+      let flushTimer: ReturnType<typeof setTimeout> | null = null
+      const paint = () => {
+        flushTimer = null
+        replaceMsg(loadingId, {
+          role: 'assistant',
+          kind: 'loading',
+          loadingText: cfg[botId].loadingText,
+          text: partialPrompt(partial),
+        })
+      }
       try {
         const mediaKind: MediaKind = opts.image ? (opts.image.isVideo ? 'video' : 'image') : null
         const content = buildPrompt(botId, idea, s, opts.modifier, mediaKind)
-        let raw: string
-        if (opts.image) {
-          const blocks = [
-            { type: 'image' as const, source: { type: 'base64' as const, media_type: opts.image.mediaType, data: opts.image.base64 } },
-            { type: 'text' as const, text: content },
-          ]
-          raw = await claude.complete({ messages: [{ role: 'user', content: blocks }], model: modelRef.current || undefined })
-        } else {
-          raw = await claude.complete({ messages: [{ role: 'user', content }], model: modelRef.current || undefined })
+        const message: Message = opts.image
+          ? {
+              role: 'user',
+              content: [
+                { type: 'image' as const, source: { type: 'base64' as const, media_type: opts.image.mediaType, data: opts.image.base64 } },
+                { type: 'text' as const, text: content },
+              ],
+            }
+          : { role: 'user', content }
+        const raw = await claude.stream({
+          messages: [message],
+          model: modelRef.current || undefined,
+          signal: ac.signal,
+          onDelta: (chunk) => {
+            partial += chunk
+            if (flushTimer == null) flushTimer = setTimeout(paint, 60)
+          },
+        })
+        if (flushTimer != null) clearTimeout(flushTimer)
+        // Stopped before anything readable arrived — drop the placeholder
+        // rather than leaving a card holding a JSON fragment.
+        if (ac.signal.aborted && !partialPrompt(raw).trim()) {
+          setMessages((prev) => prev.filter((m) => m.id !== loadingId))
+          return
         }
         const data = parse(raw)
         replaceMsg(loadingId, {
@@ -243,6 +275,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           sourceIdea: idea,
         })
       } catch (err) {
+        if (flushTimer != null) clearTimeout(flushTimer)
         const code = err instanceof ApiError ? err.code : 'server'
         let msg: string
         if (code === 'no-api') msg = 'برای پاسخِ زنده باید سرورِ مدل (نبوگیت) متصل باشد؛ این‌جا فعلاً فقط پیش‌نمایشِ ظاهر است.'
@@ -253,6 +286,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         else msg = 'یه مشکلی پیش اومد. چند لحظه صبر کن و دوباره بفرست.'
         replaceMsg(loadingId, { role: 'assistant', kind: 'error', text: msg })
       } finally {
+        if (abortRef.current === ac) abortRef.current = null
         setBusy(false)
       }
     },
@@ -278,7 +312,15 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   const setModel = useCallback((id: string) => setModelState(id), [])
 
+  // Stop generating. Whatever already streamed in is kept.
+  const stop = useCallback(() => {
+    abortRef.current?.abort()
+    abortRef.current = null
+  }, [])
+
   const newChat = useCallback(() => {
+    abortRef.current?.abort()
+    abortRef.current = null
     setConvId(null)
     convIdRef.current = null
     setMessages([])
@@ -371,6 +413,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     setSetting,
     setModel,
     newChat,
+    stop,
     send,
     runExample,
     refine,

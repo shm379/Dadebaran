@@ -203,7 +203,96 @@ export const admin = {
   },
 }
 
+// Parse one SSE frame ("event: x\ndata: {...}") into [event, payload].
+function parseFrame(frame: string): [string, Record<string, unknown>] | null {
+  let event = 'message'
+  let data = ''
+  for (const line of frame.split('\n')) {
+    if (line.startsWith('event:')) event = line.slice(6).trim()
+    else if (line.startsWith('data:')) data += line.slice(5).trim()
+  }
+  if (!data) return null
+  try {
+    return [event, JSON.parse(data) as Record<string, unknown>]
+  } catch {
+    return null
+  }
+}
+
 export const claude = {
+  /**
+   * Streamed completion. Calls onDelta as text arrives and resolves with the
+   * full answer. Pass `signal` to stop generation; aborting resolves with
+   * whatever had arrived rather than throwing, so partial output is kept.
+   */
+  async stream({
+    messages,
+    model,
+    onDelta,
+    signal,
+  }: {
+    messages: Message[]
+    model?: string
+    onDelta: (chunk: string) => void
+    signal?: AbortSignal
+  }): Promise<string> {
+    let res: Response
+    try {
+      res = await fetch(apiUrl('/api/complete/stream'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ messages, model }),
+        signal,
+      })
+    } catch {
+      if (signal?.aborted) return ''
+      throw new ApiError('offline', 'اتصال به سرور قطع شد.')
+    }
+    // Gating failures arrive before the stream opens, as ordinary JSON.
+    if (!res.ok || !res.body) {
+      const data = (await res.json().catch(() => ({}))) as { message?: string; error?: string }
+      if (res.status === 401) throw new ApiError('unauthenticated', '')
+      if (res.status === 402) throw new ApiError('quota_exceeded', data.message || '')
+      if (res.status === 503) throw new ApiError(data.error === 'no-api' ? 'no-api' : 'offline', data.message || '')
+      throw new ApiError(data.error || 'server', data.message || '')
+    }
+
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buf = ''
+    let full = ''
+    let failed: ApiError | null = null
+    try {
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buf += decoder.decode(value, { stream: true })
+        let i
+        while ((i = buf.indexOf('\n\n')) >= 0) {
+          const parsed = parseFrame(buf.slice(0, i))
+          buf = buf.slice(i + 2)
+          if (!parsed) continue
+          const [event, payload] = parsed
+          if (event === 'delta' && typeof payload.text === 'string') {
+            full += payload.text
+            onDelta(payload.text)
+          } else if (event === 'error') {
+            failed = new ApiError(payload.error === 'no-api' ? 'no-api' : 'server', '')
+          }
+        }
+      }
+    } catch {
+      // Aborted by the stop button, or the connection dropped mid-answer —
+      // keep what we already have instead of discarding it.
+      if (!signal?.aborted && !full) throw new ApiError('offline', 'اتصال قطع شد.')
+    } finally {
+      reader.cancel().catch(() => {})
+    }
+    if (failed && !full) throw failed
+    return full
+  },
+
   async complete({ messages, model }: { messages: Message[]; model?: string }): Promise<string> {
     let res: Response
     try {

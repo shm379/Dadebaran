@@ -4,14 +4,15 @@ import { DotsLoader } from './components/ui/icons'
 import { auth } from './api'
 import App from './App'
 import AuthScreen from './components/auth/AuthScreen'
+import Landing from './Landing'
 import type { User } from './types'
 
 type Status = 'loading' | 'authed' | 'anon'
 
-// Decides between the auth screen and the app based on the session cookie.
 export default function AppRoot() {
   const [status, setStatus] = useState<Status>('loading')
   const [user, setUser] = useState<User | null>(null)
+  const [showAuth, setShowAuth] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -29,10 +30,11 @@ export default function AppRoot() {
     try {
       await auth.logout()
     } catch {
-      /* ignore — clear locally regardless */
+      /* ignore */
     }
     setUser(null)
     setStatus('anon')
+    setShowAuth(false)
   }
 
   if (status === 'loading') {
@@ -49,6 +51,9 @@ export default function AppRoot() {
   }
 
   if (status === 'anon' || !user) {
+    if (!showAuth) {
+      return <Landing onStart={() => setShowAuth(true)} />
+    }
     return (
       <AuthScreen
         onAuthed={(u) => {

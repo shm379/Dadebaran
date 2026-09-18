@@ -12,7 +12,7 @@ const FALLBACK = [
 ]
 
 function nabugateBase() {
-  const url = (process.env.NABUGATE_URL || '').trim().replace(/\/+$/, '')
+  const url = (process.env.NABUGATE_URL || process.env.CHATGPT_URL || process.env.OPENAI_BASE_URL || '').trim().replace(/\/+$/, '')
   if (url) return url
   const host = (process.env.NABUGATE_HOST || '').trim()
   if (!host) return ''
@@ -42,7 +42,8 @@ function describe(id) {
 
 async function fetchFromGateway(base) {
   const headers = {}
-  if (process.env.NABUGATE_API_KEY) headers.authorization = `Bearer ${process.env.NABUGATE_API_KEY}`
+  const apiKey = process.env.NABUGATE_API_KEY || process.env.CHATGPT_API_KEY || process.env.OPENAI_API_KEY
+  if (apiKey) headers.authorization = `Bearer ${apiKey}`
   const res = await fetch(`${base}/v1/models`, { headers })
   if (!res.ok) throw new Error('models-' + res.status)
   const data = await res.json()

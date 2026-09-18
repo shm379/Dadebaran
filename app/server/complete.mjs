@@ -15,7 +15,7 @@ const MAX_TOKENS = Number(process.env.LLM_MAX_TOKENS || 1500)
 // NABUGATE_URL is the full base, e.g. http://nabugate:8080. If only host/port
 // are given (the "address and port" the operator sets), assemble it.
 function nabugateBase() {
-  const url = (process.env.NABUGATE_URL || '').trim().replace(/\/+$/, '')
+  const url = (process.env.NABUGATE_URL || process.env.CHATGPT_URL || process.env.OPENAI_BASE_URL || '').trim().replace(/\/+$/, '')
   if (url) return url
   const host = (process.env.NABUGATE_HOST || '').trim()
   if (!host) return ''
@@ -42,7 +42,8 @@ function toOpenAIContent(content) {
 async function callNabuGate(base, messages, model) {
   const openaiMessages = messages.map((m) => ({ role: m.role, content: toOpenAIContent(m.content) }))
   const headers = { 'content-type': 'application/json' }
-  if (process.env.NABUGATE_API_KEY) headers.authorization = `Bearer ${process.env.NABUGATE_API_KEY}`
+  const apiKey = process.env.NABUGATE_API_KEY || process.env.CHATGPT_API_KEY || process.env.OPENAI_API_KEY
+  if (apiKey) headers.authorization = `Bearer ${apiKey}`
 
   let res
   try {
@@ -133,7 +134,8 @@ async function* sseData(res, signal) {
 async function streamNabuGate(base, messages, model, onDelta, signal) {
   const openaiMessages = messages.map((m) => ({ role: m.role, content: toOpenAIContent(m.content) }))
   const headers = { 'content-type': 'application/json' }
-  if (process.env.NABUGATE_API_KEY) headers.authorization = `Bearer ${process.env.NABUGATE_API_KEY}`
+  const apiKey = process.env.NABUGATE_API_KEY || process.env.CHATGPT_API_KEY || process.env.OPENAI_API_KEY
+  if (apiKey) headers.authorization = `Bearer ${apiKey}`
 
   let res
   try {

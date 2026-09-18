@@ -1,0 +1,65 @@
+services:
+  app:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
+    restart: unless-stopped
+    expose:
+      - "3000"
+    environment:
+      - SERVICE_FQDN_APP_3000=${SERVICE_FQDN_APP_3000:-https://dadebaran.ir}
+      - NODE_ENV=production
+      - PORT=3000
+      - CORS_ORIGIN=${CORS_ORIGIN:-}
+      - COOKIE_SAMESITE=${COOKIE_SAMESITE:-lax}
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER:-mrc}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-mrc}
+      - POSTGRES_DB=${POSTGRES_DB:-mrc}
+      - JWT_SECRET=${JWT_SECRET:-change-me-to-a-long-random-string}
+      - COOKIE_SECURE=${COOKIE_SECURE:-true}
+      - ADMIN_EMAILS=${ADMIN_EMAILS:-}
+      - FREE_MODEL_IDS=${FREE_MODEL_IDS:-nabu-fast}
+      - NABUGATE_URL=${NABUGATE_URL:-https://gate.nabuxai.com}
+      - NABUGATE_API_KEY=${NABUGATE_API_KEY:-db-9f3575dfd0d200804bfff3f3297a9ca46abdf8343841d06e}
+      - NABUGATE_MODEL=${NABUGATE_MODEL:-nabu-fast}
+      - CHATGPT_URL=${CHATGPT_URL:-https://gpt.account30t.com}
+      - CHATGPT_API_KEY=${CHATGPT_API_KEY:-chatgpt2api}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - BILLING_PROVIDER=${BILLING_PROVIDER:-manual}
+      - ZIBAL_MERCHANT=${ZIBAL_MERCHANT:-}
+      - APP_BASE_URL=${APP_BASE_URL:-https://dadebaran.ir}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-mrc}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mrc}
+      POSTGRES_DB: ${POSTGRES_DB:-mrc}
+    volumes:
+      - dadebaran-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mrc} -d ${POSTGRES_DB:-mrc}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  dadebaran-db-data:
